@@ -31,6 +31,13 @@ run "$tmpdir/hyprglass" --help >/dev/null || fail "hyprglass help"
 json=$("$tmpdir/hyprglass" doctor --json) || fail "doctor json command"
 if command -v jq >/dev/null 2>&1; then echo "$json" | jq . >/dev/null || fail "invalid doctor JSON"; else warn "jq missing; JSON validation by jq skipped"; fi
 while IFS= read -r line; do [[ $line =~ ^source[[:space:]]*=[[:space:]]*(.*)$ ]] || continue; p=${BASH_REMATCH[1]}; p=${p/#~\/.config\/hypr\/}; p=${p/#.config\/hypr\//config/hypr/}; p=${p/#conf.d\//config/hypr/conf.d/}; [[ -f "$p" ]] || fail "missing Hyprland source $p"; done < config/hypr/hyprland.conf
+if grep -RniE '^[[:space:]]*windowrule[[:space:]]*=[[:space:]]*(float|tile|fullscreen|maximize|center|pseudo|pin|no_initial_focus|stay_focused|no_blur|no_shadow|no_anim|opaque|force_rgbx)([[:space:]]*,|[[:space:]]*$)|^[[:space:]]*windowrule[[:space:]]*=.*,([[:space:]]*)(float|tile|fullscreen|maximize|center|pseudo|pin|no_initial_focus|stay_focused|no_blur|no_shadow|no_anim|opaque|force_rgbx)([[:space:]]*,|[[:space:]]*$)' config/hypr; then fail "windowrule boolean effects need explicit values"; else pass "windowrule boolean effects have explicit values"; fi
+if grep -RniE '^[[:space:]]*layerrule[[:space:]]*=[[:space:]]*(blur|blur_popups|no_anim|dim_around|no_screen_share)([[:space:]]*,|[[:space:]]*$)|^[[:space:]]*layerrule[[:space:]]*=.*,([[:space:]]*)(blur|blur_popups|no_anim|dim_around|no_screen_share)([[:space:]]*,|[[:space:]]*$)' config/hypr; then fail "layerrule boolean effects need explicit values"; else pass "layerrule boolean effects have explicit values"; fi
+for svc in hyprpaper waybar mako hypridle; do grep -Eq "^exec-once[[:space:]]*=[[:space:]]*$svc([[:space:]]|\$)" config/hypr/conf.d/autostart.conf || fail "missing autostart for $svc"; done
+grep -Fq "hyprglass-dusk.png" config/hypr/hyprpaper.conf || fail "hyprpaper wallpaper path missing"
+[[ -f assets/wallpapers/hyprglass-dusk.png ]] || fail "wallpaper asset missing"
+[[ -f config/waybar/config.jsonc && -f config/waybar/style.css ]] || fail "waybar config/style missing"
+pass "wallpaper and top bar config chain present"
 find . -xtype l -print -quit | grep -q . && fail "broken symlink found" || pass "no broken symlinks"
 for s in scripts/*.sh scripts/*.py; do [[ -x $s ]] || fail "$s not executable"; done
 if [[ $(sort packages/arch-core.txt | uniq -d | wc -l) -ne 0 ]]; then fail "duplicate package in arch-core"; else pass "no duplicate core packages"; fi

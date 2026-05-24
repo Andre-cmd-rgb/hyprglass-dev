@@ -9,6 +9,7 @@ If you see a red error bar listing config errors, the most common causes are:
 - **`config option <X> does not exist`** — a deprecated option from an older Hyprland version.
   Run `hyprctl version` to confirm your version, then check the release notes.
 - **`windowrulev2`** — removed in 0.53; replaced by `windowrule = <rule>, match:class <regex>`.
+- **`invalid field center: missing a value`** — boolean window/layer rule effects need explicit values on current Hyprland. Use `center on`, `float on`, `blur on`, etc.
 - **`gestures:workspace_swipe`** — removed in 0.51; replaced by `gesture = 3, horizontal, workspace`.
 - **`dwindle:pseudotile`** — removed in 0.55; use `windowrule = pseudo, match:class <class>` per-app.
 
