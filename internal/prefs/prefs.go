@@ -446,12 +446,6 @@ window#waybar {
   padding: 0 10px;
 }
 
-#custom-logo {
-  color: %s;
-  font-weight: 700;
-  padding: 0 10px 0 4px;
-}
-
 #workspaces { padding: 0 4px; }
 
 #workspaces button {
@@ -504,7 +498,7 @@ window#waybar {
 #battery.critical { color: %s; }
 #custom-bluetooth.off { color: %s; }
 #custom-bluetooth.on { color: %s; }
-`, cssColor(panelCSS(p.Panel)), cssColor(p.Border), cssColor(p.Text), cssColor(p.Text), cssColor(p.Muted), cssColor(p.BG), cssColor(p.Accent), cssColor(p.Text), cssColor(p.Muted), cssColor(p.Accent), cssColor(p.Danger), cssColor(p.Warn), cssColor(p.Danger), cssColor(p.Muted), cssColor(p.Accent))
+`, cssColor(panelCSS(p.Panel)), cssColor(p.Border), cssColor(p.Text), cssColor(p.Muted), cssColor(p.BG), cssColor(p.Accent), cssColor(p.Text), cssColor(p.Muted), cssColor(p.Accent), cssColor(p.Danger), cssColor(p.Warn), cssColor(p.Danger), cssColor(p.Muted), cssColor(p.Accent))
 }
 
 func cssColor(v string) string {

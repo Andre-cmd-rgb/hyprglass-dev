@@ -7,7 +7,6 @@
   "height": 36,
   "spacing": 6,
   "modules-left": [
-    "custom/logo",
     "hyprland/workspaces"
   ],
   "modules-center": [
@@ -22,11 +21,6 @@
     "custom/settings",
     "custom/power"
   ],
-  "custom/logo": {
-    "format": "Hyprglass",
-    "tooltip": false,
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
-  },
   "hyprland/workspaces": {
     "format": "{name}",
     "persistent-workspaces": {
@@ -38,9 +32,12 @@
     "tooltip-format": "{:%A, %d %B %Y}"
   },
   "network": {
-    "format-wifi": "  {essid}",
-    "format-ethernet": "󰈀 wired",
-    "format-disconnected": "󰤭 offline",
+    "format-wifi": "",
+    "format-ethernet": "󰈀",
+    "format-disconnected": "󰤭",
+    "tooltip-format-wifi": "{essid} ({signalStrength}%)",
+    "tooltip-format-ethernet": "{ifname}",
+    "tooltip-format-disconnected": "Disconnected",
     "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
   },
   "custom/bluetooth": {
@@ -50,18 +47,19 @@
     "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
   },
   "pulseaudio": {
-    "format": "  {volume}%",
-    "format-muted": "󰝟 muted",
+    "format": "",
+    "format-muted": "󰝟",
     "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
   },
   "backlight": {
-    "format": "󰃠 {percent}%",
+    "format": "󰃠",
+    "tooltip": true,
     "on-scroll-up": "brightnessctl set +5%",
     "on-scroll-down": "brightnessctl set 5%-"
   },
   "battery": {
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
+    "format": "{icon}",
+    "format-charging": "󰂄",
     "format-icons": [
       "󰁺",
       "󰁻",
@@ -74,6 +72,7 @@
       "󰂂",
       "󰁹"
     ],
+    "tooltip-format": "{capacity}% {timeTo}",
     "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
   },
   "custom/settings": {
@@ -84,6 +83,6 @@
   "custom/power": {
     "format": "⏻",
     "tooltip": "Power",
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Power\" -e hyprglass power >/dev/null 2>&1'"
+    "on-click": "sh -lc 'setsid -f hyprglass-powermenu >/dev/null 2>&1'"
   }
 }

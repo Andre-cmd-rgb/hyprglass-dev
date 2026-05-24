@@ -20,12 +20,6 @@ window#waybar {
   padding: 0 10px;
 }
 
-#custom-logo {
-  color: #f2f2ec;
-  font-weight: 700;
-  padding: 0 10px 0 4px;
-}
-
 #workspaces { padding: 0 4px; }
 
 #workspaces button {

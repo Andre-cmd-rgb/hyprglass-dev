@@ -77,6 +77,7 @@ hyprglass audio
 hyprglass display
 hyprglass laptop
 hyprglass power
+hyprglass-powermenu         # GUI fuzzel power menu (also: Waybar ⏻ button / Super+Shift+P)
 hyprglass system [--json | rate-mirrors | chwd-list]
 hyprglass wallpaper apply
 hyprglass touchid status
@@ -90,7 +91,7 @@ Sections: Appearance, Display/Keyboard, Network/Bluetooth/Modem, Audio, Power, U
 
 ## Display safety
 
-Settings never rewrites `~/.config/hypr/conf.d/monitors.conf` during normal applies. Display changes require an explicit action: **Settings → Display, scaling, and keyboard** or `--with-display`.
+Settings never rewrites `~/.config/hypr/conf.d/monitors.conf` outside the managed display block during normal applies. Display changes require an explicit action: **Settings → Display, scaling, and keyboard** or `--with-display`.
 
 The installer also preserves any existing `monitors.conf` during updates — it will not overwrite a custom laptop/external-monitor layout.
 

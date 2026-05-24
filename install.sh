@@ -81,12 +81,11 @@ os_release_value() {
 }
 
 is_cachyos() {
-  local d="${DISTRO,,}" id like
+  local d="${DISTRO,,}" id
   [[ "$d" == cachyos ]] && return 0
   [[ "$d" == arch ]] && return 1
   id=$(os_release_value ID 2>/dev/null || true)
-  like=$(os_release_value ID_LIKE 2>/dev/null || true)
-  [[ "$id" == cachyos || " $like " == *" arch "* && "$id" == cachyos ]]
+  [[ "$id" == cachyos ]]
 }
 
 package_file() {
@@ -509,6 +508,8 @@ PYLOCK
 ensure_current_shell_command() {
   local target="$PREFIX/hyprglass"
   local link="/usr/local/bin/hyprglass"
+  local pm_target="$PREFIX/hyprglass-powermenu"
+  local pm_link="/usr/local/bin/hyprglass-powermenu"
 
   [[ $CONFIGS_ONLY -eq 0 ]] || return 0
   [[ -x "$target" || $DRY -eq 1 ]] || return 0
@@ -522,9 +523,14 @@ ensure_current_shell_command() {
   if [[ -w /usr/local/bin ]]; then
     ln -sf "$target" "$link"
     echo "Linked $link -> $target"
+    [[ -x "$pm_target" ]] && ln -sf "$pm_target" "$pm_link" && echo "Linked $pm_link -> $pm_target"
   elif command -v sudo >/dev/null 2>&1; then
     sudo ln -sf "$target" "$link"
     echo "Linked $link -> $target"
+    if [[ -x "$pm_target" ]]; then
+      sudo ln -sf "$pm_target" "$pm_link"
+      echo "Linked $pm_link -> $pm_target"
+    fi
   else
     cat <<MSG
 
@@ -638,6 +644,7 @@ if [[ $CONFIGS_ONLY -eq 0 ]]; then
   VERSION=$(build_version)
   [[ $DRY -eq 1 ]] || ensure_go_cache
   run go build -buildvcs=false -ldflags "-s -w -X main.version=$VERSION -X main.sourceRoot=$ROOT" -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"
+  run install -m 0755 "$ROOT/scripts/hyprglass-powermenu.sh" "$PREFIX/hyprglass-powermenu"
 fi
 
 # Back up + copy configs

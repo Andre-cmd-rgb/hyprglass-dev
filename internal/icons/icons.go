@@ -42,7 +42,7 @@ func Run(r command.Runner, args []string) {
 func RunTUI(r command.Runner) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		clear()
+		tui.Clear()
 		tui.Header("Icon and font repair")
 		fmt.Println("Waybar icons require Nerd Font text plus the Symbols Nerd Font fallback.")
 		fmt.Println()
@@ -57,18 +57,18 @@ func RunTUI(r command.Runner) {
 		switch strings.ToLower(strings.TrimSpace(choice)) {
 		case "1":
 			Repair(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "2":
 			RefreshCache(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "3":
 			ReloadWaybar(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "q", "":
 			return
 		default:
 			fmt.Println("Unknown selection.")
-			pause(reader)
+			tui.Pause(reader)
 		}
 	}
 }
@@ -191,15 +191,4 @@ func familyContainsAny(line string, needles []string) bool {
 		}
 	}
 	return false
-}
-
-func clear() {
-	if os.Getenv("TERM") != "" {
-		fmt.Print("\033[H\033[2J")
-	}
-}
-
-func pause(r *bufio.Reader) {
-	fmt.Print("\nPress Enter to continue.")
-	_, _ = r.ReadString('\n')
 }

@@ -282,13 +282,13 @@ func wallpaper(r command.Runner, args []string) {
 		fmt.Println("Usage: hyprglass wallpaper [apply|generate]")
 		os.Exit(2)
 	}
-	installed, err := installWallpaper(root, source)
+	installed, err := installWallpaper(source)
 	if err != nil {
 		fmt.Println("could not install wallpaper:", err)
 		os.Exit(1)
 	}
 	restartHyprpaper(r, installed)
-	fmt.Println("Wallpaper installed to ~/.config/hypr/assets/wallpapers/hyprglass-dusk.png")
+	fmt.Println("Wallpaper installed to", installed)
 }
 
 func update() {
@@ -322,7 +322,7 @@ func repair() {
 	wallpaperPath := ""
 	if root != "" {
 		source := filepath.Join(root, "assets", "wallpapers", "hyprglass-dusk.png")
-		installed, err := installWallpaper(root, source)
+		installed, err := installWallpaper(source)
 		if err != nil {
 			fmt.Println("Wallpaper repair failed:", err)
 		} else {
@@ -347,7 +347,7 @@ func repair() {
 	tui.Launch("waybar")
 	tui.Launch("mako")
 	tui.Launch("hypridle")
-	fmt.Println("Waybar, mako, and hypridle restarted. Network services were not touched.")
+	fmt.Println("Session surfaces restarted. Network services were not touched.")
 }
 
 func ensureExecutableBits(root string) {
@@ -361,8 +361,7 @@ func ensureExecutableBits(root string) {
 	}
 }
 
-func installWallpaper(root, source string) (string, error) {
-	_ = root
+func installWallpaper(source string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
