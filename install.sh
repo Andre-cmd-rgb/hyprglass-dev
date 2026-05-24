@@ -199,6 +199,22 @@ configure_desktop_theme() {
   fi
 }
 
+write_installed_hyprpaper_config() {
+  local wallpaper="$HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png"
+  local dst="$HOME/.config/hypr/hyprpaper.conf"
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ write absolute wallpaper path to $dst"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cat >"$dst" <<EOF
+# Hyprglass hyprpaper configuration
+preload = $wallpaper
+wallpaper = , $wallpaper
+splash = false
+EOF
+}
+
 ensure_current_shell_command() {
   local target="$PREFIX/hyprglass"
   local link="/usr/local/bin/hyprglass"
@@ -373,6 +389,7 @@ copy_cfg "$ROOT/config/qt"       "$HOME/.config/qt6ct"
 run mkdir -p "$HOME/.config/hypr/assets" "$HOME/.config/hyprglass/docs"
 run cp -a "$ROOT/assets/wallpapers" "$HOME/.config/hypr/assets/"
 run cp -a "$ROOT/docs/shortcuts.md" "$HOME/.config/hyprglass/docs/shortcuts.md"
+write_installed_hyprpaper_config
 write_source_root
 configure_path
 configure_desktop_theme
@@ -382,10 +399,20 @@ verify_installed_configs
 ensure_executable_bits
 
 # Systemd services
+enable_service_if_present() {
+  local svc="$1"
+  if systemctl list-unit-files "$svc" >/dev/null 2>&1; then
+    sudo systemctl enable --now "$svc"
+  else
+    echo "Skipping missing service: $svc"
+  fi
+}
+
 if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 ]]; then
-  if ask "Enable NetworkManager, bluetooth, and ModemManager services now?"; then
-    sudo systemctl enable --now \
-      NetworkManager.service bluetooth.service ModemManager.service
+  if ask "Enable laptop/network services now?"; then
+    for svc in NetworkManager.service bluetooth.service ModemManager.service power-profiles-daemon.service; do
+      enable_service_if_present "$svc"
+    done
   fi
 fi
 

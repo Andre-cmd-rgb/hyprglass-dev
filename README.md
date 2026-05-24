@@ -71,11 +71,17 @@ hyprglass bluetooth
 hyprglass lte
 hyprglass audio
 hyprglass display
+hyprglass laptop
 hyprglass settings
 hyprglass power
 hyprglass wallpaper apply
 hyprglass touchid status
 ```
+
+`hyprglass laptop` is the laptop control surface: battery, power profile,
+thermal/fan readings, sleep state, LTE, and fingerprint status. It can set
+`power-saver`, `balanced`, or `performance` through `powerprofilesctl` when the
+hardware/driver stack exposes those profiles.
 
 `hyprglass wallpaper apply` installs the Hyprglass wallpaper into
 `~/.config/hypr/assets/wallpapers/`, refreshes `hyprpaper.conf`, and restarts

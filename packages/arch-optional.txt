@@ -4,4 +4,6 @@ btop
 pavucontrol
 nwg-look
 qt6ct
-fprintd
+fwupd
+acpi
+iio-sensor-proxy

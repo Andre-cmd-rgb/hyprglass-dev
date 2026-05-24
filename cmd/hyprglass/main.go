@@ -16,6 +16,7 @@ import (
 	"hyprglass/internal/command"
 	"hyprglass/internal/display"
 	"hyprglass/internal/doctor"
+	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
 	"hyprglass/internal/tui"
 	"hyprglass/internal/wifi"
@@ -36,6 +37,8 @@ func main() {
 	switch args[0] {
 	case "version":
 		fmt.Println("hyprglass", version)
+	case "info":
+		info(r)
 	case "doctor":
 		res := doctor.Run(r)
 		if contains(args[1:], "--json") {
@@ -58,10 +61,14 @@ func main() {
 		audio.RunTUI(r)
 	case "display":
 		display.RunTUI(r)
+	case "laptop":
+		laptop.RunTUI(r, args[1:])
 	case "settings":
 		settings(r)
 	case "power":
 		power(r)
+	case "visualizer", "cava":
+		visualizer(r)
 	case "touchid", "fingerprint":
 		touchID(r, args[1:])
 	case "update":
@@ -90,8 +97,10 @@ func help() {
 Usage:
   hyprglass --help
   hyprglass version
+  hyprglass info
   hyprglass doctor [--json]
-  hyprglass wifi | bluetooth | lte | audio | display | settings | power
+  hyprglass wifi | bluetooth | lte | audio | display | laptop | settings | power
+  hyprglass cava
   hyprglass touchid [status|enroll|verify]
   hyprglass update
   hyprglass repair
@@ -177,7 +186,10 @@ func settings(r command.Runner) {
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  hyprglass wallpaper apply      apply and reload Hyprglass wallpaper")
+	fmt.Println("  hyprglass laptop               battery, thermal, sleep, profile")
 	fmt.Println("  hyprglass power                open power actions")
+	fmt.Println("  hyprglass info                 system summary via pfetch/fastfetch")
+	fmt.Println("  hyprglass cava                 audio visualizer")
 	fmt.Println("  hyprglass touchid status       check fingerprint tools")
 	fmt.Println("  hyprglass doctor               run health checks")
 	if r.Exists("gsettings") {
@@ -185,6 +197,36 @@ func settings(r command.Runner) {
 		if value := cleanGSettingsValue(out); value != "" {
 			fmt.Println("GTK color-scheme:", value)
 		}
+	}
+}
+
+func info(r command.Runner) {
+	if r.Exists("pfetch") {
+		out, err := r.Run("pfetch")
+		fmt.Print(filterDconfWarnings(out))
+		if err != nil {
+			fmt.Println("pfetch failed:", err)
+		}
+		return
+	}
+	if r.Exists("fastfetch") {
+		out, err := r.Run("fastfetch")
+		fmt.Print(filterDconfWarnings(out))
+		if err != nil {
+			fmt.Println("fastfetch failed:", err)
+		}
+		return
+	}
+	fmt.Println("pfetch is missing. Install pfetch-rs.")
+}
+
+func visualizer(r command.Runner) {
+	if !r.Exists("cava") {
+		fmt.Println("cava is missing. Install cava.")
+		return
+	}
+	if err := syscall.Exec("cava", []string{"cava"}, os.Environ()); err != nil {
+		fmt.Println("could not start cava:", err)
 	}
 }
 
@@ -386,13 +428,15 @@ func installWallpaper(root, source string) error {
 	if err := copyFile(source, filepath.Join(targetDir, "hyprglass-dusk.png")); err != nil {
 		return err
 	}
-	hyprpaper := filepath.Join(root, "config", "hypr", "hyprpaper.conf")
-	if _, err := os.Stat(hyprpaper); err == nil {
-		if err := copyFile(hyprpaper, filepath.Join(home, ".config", "hypr", "hyprpaper.conf")); err != nil {
-			return err
-		}
+	return writeHyprpaperConfig(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), filepath.Join(targetDir, "hyprglass-dusk.png"))
+}
+
+func writeHyprpaperConfig(path, wallpaper string) error {
+	data := fmt.Sprintf("# Hyprglass hyprpaper configuration\npreload = %s\nwallpaper = , %s\nsplash = false\n", wallpaper, wallpaper)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
 	}
-	return nil
+	return os.WriteFile(path, []byte(data), 0o644)
 }
 
 func copyFile(src, dst string) error {
@@ -457,4 +501,17 @@ func cleanGSettingsValue(out string) string {
 		return line
 	}
 	return ""
+}
+
+func filterDconfWarnings(out string) string {
+	var kept []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "dconf-CRITICAL") ||
+			strings.Contains(line, "unable to create file '/run/user") ||
+			strings.Contains(line, "dconf will not work properly") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }

@@ -29,3 +29,10 @@ git
 jq
 python
 python-pillow
+ttf-jetbrains-mono-nerd
+upower
+power-profiles-daemon
+lm_sensors
+fprintd
+cava
+pfetch-rs

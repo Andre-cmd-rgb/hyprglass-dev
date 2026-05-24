@@ -25,6 +25,8 @@ Start from a TTY with `start-hyprland` (0.53+) or `Hyprland` and read the printe
 
 Hyprpaper needs `~/.config/hypr/hyprpaper.conf`. Confirm `exec-once = hyprpaper` is in
 `autostart.conf` and that the wallpaper path in `hyprpaper.conf` exists.
+Hyprglass writes an absolute wallpaper path during install to avoid tilde
+expansion differences between shells and hyprpaper.
 Re-apply and restart hyprpaper with:
 
 ```
@@ -146,6 +148,19 @@ hyprglass touchid verify
 Hyprglass does not edit PAM automatically because a bad PAM edit can lock users
 out of sudo or login. Enable fingerprint auth only after reviewing your distro's
 PAM guidance.
+
+## Power profiles, fans, and laptop thermals
+
+Run:
+
+```
+hyprglass laptop
+```
+
+Power profiles require `power-profiles-daemon`. Thermal and fan readings require
+`lm_sensors`; some laptops expose no fan RPMs to Linux even when cooling works.
+Hyprglass reports unavailable hardware instead of forcing vendor-specific fan
+control.
 
 ## Kitty too transparent
 
