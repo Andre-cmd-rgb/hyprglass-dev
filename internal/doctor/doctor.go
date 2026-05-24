@@ -37,7 +37,7 @@ func Run(r command.Runner) Result {
 	} else {
 		add("hyprland session", "warn", "not inside Hyprland; runtime compositor checks skipped", "Start Hyprland then rerun doctor")
 	}
-	for _, c := range []string{"hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go"} {
+	for _, c := range []string{"hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go", "brightnessctl", "playerctl"} {
 		if r.Exists(c) {
 			add("command: "+c, "pass", "found", "")
 		} else {

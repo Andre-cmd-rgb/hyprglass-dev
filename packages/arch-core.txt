@@ -20,7 +20,10 @@ slurp
 wl-clipboard
 nautilus
 polkit
+polkit-gnome
 gnome-keyring
+brightnessctl
+playerctl
 go
 git
 jq
