@@ -13,11 +13,13 @@
     "clock"
   ],
   "modules-right": [
+    "custom/lte",
     "network",
     "custom/bluetooth",
     "pulseaudio",
     "backlight",
     "battery",
+    "custom/power-profile",
     "custom/settings",
     "custom/power"
   ],
@@ -31,6 +33,13 @@
     "format": "{:%a %d %b  %H:%M}",
     "tooltip-format": "{:%A, %d %B %Y}"
   },
+  "custom/lte": {
+    "exec-if": "mmcli -L 2>/dev/null | grep -q Modem",
+    "exec": "echo '󰤨'",
+    "interval": 15,
+    "tooltip": "LTE/5G",
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass LTE\" -e hyprglass lte >/dev/null 2>&1'"
+  },
   "network": {
     "format-wifi": "",
     "format-ethernet": "󰈀",
@@ -38,22 +47,23 @@
     "tooltip-format-wifi": "{essid} ({signalStrength}%)",
     "tooltip-format-ethernet": "{ifname}",
     "tooltip-format-disconnected": "Disconnected",
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Wi-Fi\" -e hyprglass wifi >/dev/null 2>&1'"
   },
   "custom/bluetooth": {
     "exec": "hyprglass bluetooth --status",
     "interval": 10,
     "return-type": "json",
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Bluetooth\" -e hyprglass bluetooth >/dev/null 2>&1'"
   },
   "pulseaudio": {
     "format": "",
     "format-muted": "󰝟",
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
+    "tooltip-format": "{volume}%",
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Audio\" -e hyprglass audio >/dev/null 2>&1'"
   },
   "backlight": {
     "format": "󰃠",
-    "tooltip": true,
+    "tooltip-format": "{percent}%",
     "on-scroll-up": "brightnessctl set +5%",
     "on-scroll-down": "brightnessctl set 5%-"
   },
@@ -73,7 +83,13 @@
       "󰁹"
     ],
     "tooltip-format": "{capacity}% {timeTo}",
-    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Settings\" -e hyprglass settings >/dev/null 2>&1'"
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Power\" -e hyprglass laptop >/dev/null 2>&1'"
+  },
+  "custom/power-profile": {
+    "exec": "p=$(powerprofilesctl get 2>/dev/null) || exit 0; case \"$p\" in power-saver) echo '{\"text\":\"󰌪\",\"tooltip\":\"Power saver\",\"class\":\"power-saver\"}' ;; performance) echo '{\"text\":\"󱐋\",\"tooltip\":\"Performance\",\"class\":\"performance\"}' ;; *) echo '{\"text\":\"󰾅\",\"tooltip\":\"Balanced\",\"class\":\"balanced\"}' ;; esac",
+    "return-type": "json",
+    "interval": 30,
+    "on-click": "sh -lc 'setsid -f kitty --class hyprglass-settings --title \"Hyprglass Power\" -e hyprglass laptop >/dev/null 2>&1'"
   },
   "custom/settings": {
     "format": "󰒓",

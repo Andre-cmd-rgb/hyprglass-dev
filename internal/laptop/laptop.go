@@ -76,7 +76,7 @@ func Collect(r command.Runner) Status {
 }
 
 func printStatus(s Status) {
-	tui.Header("Laptop")
+	tui.Header("Power and battery")
 	if len(s.Batteries) == 0 {
 		fmt.Println("battery: no battery detected")
 	} else {

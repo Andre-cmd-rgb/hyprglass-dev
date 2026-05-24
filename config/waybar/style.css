@@ -36,11 +36,13 @@ window#waybar {
 }
 
 #clock,
+#custom-lte,
 #network,
 #custom-bluetooth,
 #pulseaudio,
 #backlight,
 #battery,
+#custom-power-profile,
 #custom-settings,
 #custom-power {
   color: #f2f2ec;
@@ -49,17 +51,21 @@ window#waybar {
 }
 
 #clock { color: #d9dddf; }
+#custom-lte,
 #network,
 #custom-bluetooth,
 #pulseaudio,
 #backlight,
 #battery,
+#custom-power-profile,
 #custom-settings,
 #custom-power {
   font-family: "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font", "Noto Sans", "DejaVu Sans", sans-serif;
 }
 
+#custom-lte,
 #custom-bluetooth,
+#custom-power-profile,
 #custom-settings,
 #custom-power {
   font-size: 13px;
@@ -72,3 +78,5 @@ window#waybar {
 #battery.critical { color: #ff7b87; }
 #custom-bluetooth.off { color: #7f8792; }
 #custom-bluetooth.on { color: #9aa0aa; }
+#custom-power-profile.performance { color: #ffb4a8; }
+#custom-power-profile.power-saver { color: #a6d189; }

@@ -88,6 +88,16 @@ is_cachyos() {
   [[ "$id" == cachyos ]]
 }
 
+check_go() {
+  command -v go >/dev/null 2>&1 || { echo "ERROR: Go not found. Install Go 1.22+: pacman -S go"; exit 1; }
+  local v major minor
+  v=$(go version | grep -o 'go[0-9][0-9.]*' | sed 's/go//')
+  IFS='.' read -r major minor _ <<< "$v"
+  [[ $major -gt 1 || ($major -eq 1 && $minor -ge 22) ]] || {
+    echo "ERROR: Go 1.22+ required (found go$v). Upgrade: pacman -S go"; exit 1
+  }
+}
+
 package_file() {
   local d="${DISTRO,,}"
   case "$d" in
@@ -641,6 +651,7 @@ fi
 # Build binary
 run mkdir -p "$PREFIX"
 if [[ $CONFIGS_ONLY -eq 0 ]]; then
+  check_go
   VERSION=$(build_version)
   [[ $DRY -eq 1 ]] || ensure_go_cache
   run go build -C "$ROOT" -buildvcs=false -ldflags "-s -w -X main.version=$VERSION -X main.sourceRoot=$ROOT" -o "$PREFIX/hyprglass" "./cmd/hyprglass"
