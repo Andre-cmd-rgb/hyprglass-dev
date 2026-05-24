@@ -643,7 +643,7 @@ run mkdir -p "$PREFIX"
 if [[ $CONFIGS_ONLY -eq 0 ]]; then
   VERSION=$(build_version)
   [[ $DRY -eq 1 ]] || ensure_go_cache
-  run go build -buildvcs=false -ldflags "-s -w -X main.version=$VERSION -X main.sourceRoot=$ROOT" -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"
+  run go build -C "$ROOT" -buildvcs=false -ldflags "-s -w -X main.version=$VERSION -X main.sourceRoot=$ROOT" -o "$PREFIX/hyprglass" "./cmd/hyprglass"
   run install -m 0755 "$ROOT/scripts/hyprglass-powermenu.sh" "$PREFIX/hyprglass-powermenu"
 fi
 
