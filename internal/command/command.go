@@ -14,7 +14,7 @@ type Runner interface {
 type RealRunner struct{}
 
 func (RealRunner) Run(name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutFor(name, args...))
 	defer cancel()
 	b, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -23,6 +23,43 @@ func (RealRunner) Run(name string, args ...string) (string, error) {
 	return string(b), err
 }
 func (RealRunner) Exists(name string) bool { _, err := exec.LookPath(name); return err == nil }
+
+func timeoutFor(name string, args ...string) time.Duration {
+	switch name {
+	case "nmcli":
+		if hasArgs(args, "device", "wifi", "list") || hasArgs(args, "device", "wifi", "rescan") {
+			return 25 * time.Second
+		}
+		return 15 * time.Second
+	case "mmcli":
+		return 20 * time.Second
+	case "hyprctl", "bluetoothctl", "wpctl", "systemctl", "loginctl":
+		return 15 * time.Second
+	case "python3":
+		return 60 * time.Second
+	default:
+		return 15 * time.Second
+	}
+}
+
+func hasArgs(args []string, want ...string) bool {
+	if len(want) == 0 || len(args) < len(want) {
+		return false
+	}
+	for i := 0; i <= len(args)-len(want); i++ {
+		ok := true
+		for j, w := range want {
+			if args[i+j] != w {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
 
 type MockRunner struct {
 	Outputs map[string]string

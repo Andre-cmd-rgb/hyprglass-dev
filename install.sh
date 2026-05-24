@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Argument parsing ─────────────────────────────────────────────────────────
+# Argument parsing
 YES=0 DRY=0 NO_PACKAGES=0 CONFIGS_ONLY=0 UPDATE=0
-PREFIX="${HOME}/.local/bin"
+PREFIX="${HYPRGLASS_PREFIX:-${HOME}/.local/bin}"
 
 for a in "$@"; do
   case "$a" in
@@ -49,35 +49,176 @@ ask(){
   [[ $ans == y || $ans == Y ]]
 }
 
-# ── --update: pull latest from git ──────────────────────────────────────────
+build_version() {
+  local v=""
+  if [[ -n "${HYPRGLASS_VERSION:-}" ]]; then
+    v="$HYPRGLASS_VERSION"
+  elif [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
+    v=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || true)
+  fi
+  printf '%s\n' "${v:-0.1.0}"
+}
+
+ensure_go_cache() {
+  local cache
+  cache="${GOCACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/go-build}"
+  if mkdir -p "$cache" 2>/dev/null && [[ -w "$cache" ]]; then
+    export GOCACHE="$cache"
+    return 0
+  fi
+  export GOCACHE="${TMPDIR:-/tmp}/hyprglass-go-cache"
+  mkdir -p "$GOCACHE"
+}
+
+path_expr() {
+  if [[ "$PREFIX" == "$HOME/.local/bin" ]]; then
+    printf '%s\n' '$HOME/.local/bin'
+  else
+    printf '%s\n' "$PREFIX"
+  fi
+}
+
+path_block_posix() {
+  local bin_path
+  bin_path=$(path_expr)
+  cat <<EOF
+
+# >>> hyprglass PATH >>>
+case ":\$PATH:" in
+  *":$bin_path:"*) ;;
+  *) export PATH="$bin_path:\$PATH" ;;
+esac
+# <<< hyprglass PATH <<<
+EOF
+}
+
+path_block_fish() {
+  local bin_path
+  bin_path=$(path_expr)
+  cat <<EOF
+
+# >>> hyprglass PATH >>>
+if functions -q fish_add_path
+    fish_add_path -g "$bin_path"
+else if not contains "$bin_path" \$PATH
+    set -gx PATH "$bin_path" \$PATH
+end
+# <<< hyprglass PATH <<<
+EOF
+}
+
+ensure_path_block() {
+  local file="$1" shell_kind="$2"
+  [[ -n "$file" ]] || return 0
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ ensure $PREFIX is on PATH in $file"
+    return 0
+  fi
+  mkdir -p "$(dirname "$file")"
+  touch "$file"
+  if grep -Fq ">>> hyprglass PATH >>>" "$file"; then
+    return 0
+  fi
+  if [[ "$shell_kind" == fish ]]; then
+    path_block_fish >>"$file"
+  else
+    path_block_posix >>"$file"
+  fi
+}
+
+configure_path() {
+  local shell_name rc_file profile bin_path
+  shell_name=$(basename "${SHELL:-}")
+  profile="$HOME/.profile"
+  bin_path=$(path_expr)
+
+  case "$shell_name" in
+    bash) rc_file="$HOME/.bashrc" ;;
+    zsh) rc_file="$HOME/.zshrc" ;;
+    fish) rc_file="$HOME/.config/fish/config.fish" ;;
+    *) rc_file="" ;;
+  esac
+
+  if [[ "$shell_name" == fish ]]; then
+    ensure_path_block "$rc_file" fish
+  elif [[ -n "$rc_file" ]]; then
+    ensure_path_block "$rc_file" posix
+  fi
+  ensure_path_block "$profile" posix
+
+  if [[ $DRY -eq 1 ]]; then
+    cat <<MSG
+
+PATH would be configured for future shells.
+After a real install, open a new terminal or run:
+  exec ${SHELL:-/bin/sh} -l
+
+For the current terminal only after install:
+  export PATH="$bin_path:\$PATH"
+MSG
+    return 0
+  fi
+
+  cat <<MSG
+
+PATH configured for future shells.
+Open a new terminal, or run:
+  exec ${SHELL:-/bin/sh} -l
+
+For this current terminal only, you can also run:
+  export PATH="$bin_path:\$PATH"
+MSG
+}
+
+write_source_root() {
+  local dst="$HOME/.config/hyprglass/source-root"
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ write source root to $dst"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  printf '%s\n' "$ROOT" >"$dst"
+}
+
+# --update: pull latest from git
 if [[ $UPDATE -eq 1 ]]; then
   echo "==> Hyprglass update"
   if [[ -d "$ROOT/.git" ]]; then
-    echo "Git repo detected — pulling latest changes..."
+    echo "Git repo detected - pulling latest changes..."
     run git -C "$ROOT" pull --ff-only
+    if [[ $DRY -eq 0 && "${HYPRGLASS_UPDATE_REEXECED:-0}" != 1 ]]; then
+      echo "Restarting installer after pull so any updated install logic is used..."
+      exec env HYPRGLASS_UPDATE_REEXECED=1 bash "$ROOT/install.sh" "$@"
+    fi
   else
     echo "Not a git repo (installed from zip). Skipping git pull."
     echo "To get updates: download the latest zip from the repo and re-run ./install.sh --update"
   fi
 fi
 
-# ── Packages ─────────────────────────────────────────────────────────────────
+# Packages
 if [[ $NO_PACKAGES -eq 0 ]]; then
   if command -v pacman >/dev/null 2>&1; then
     mapfile -t pkgs < <(grep -vE '^\s*(#|$)' "$ROOT/packages/arch-core.txt" | sort -u)
-    run sudo pacman -S --needed "${pkgs[@]}"
+    if [[ ${#pkgs[@]} -eq 0 ]]; then
+      echo "No packages listed in packages/arch-core.txt; skipping package install."
+    else
+      run sudo pacman -S --needed "${pkgs[@]}"
+    fi
   else
     echo "pacman not found; skipping package install."
   fi
 fi
 
-# ── Build binary ─────────────────────────────────────────────────────────────
+# Build binary
 run mkdir -p "$PREFIX"
 if [[ $CONFIGS_ONLY -eq 0 ]]; then
-  run go build -buildvcs=false -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"
+  VERSION=$(build_version)
+  [[ $DRY -eq 1 ]] || ensure_go_cache
+  run go build -buildvcs=false -ldflags "-s -w -X main.version=$VERSION -X main.sourceRoot=$ROOT" -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"
 fi
 
-# ── Back up + copy configs ───────────────────────────────────────────────────
+# Back up + copy configs
 backup="$HOME/.config/hyprglass-backups/$(date +%Y%m%d-%H%M%S)"
 run mkdir -p "$backup"
 
@@ -91,6 +232,9 @@ copy_cfg() {
   if [[ -e "$dst" && $YES -ne 1 && $DRY -ne 1 ]]; then
     ask "Overwrite $dst?" || return 0
   fi
+  if [[ -e "$dst" ]]; then
+    run rm -rf "$dst"
+  fi
   run mkdir -p "$(dirname "$dst")"
   run cp -a "$src" "$dst"
 }
@@ -98,8 +242,8 @@ copy_cfg() {
 copy_cfg "$ROOT/config/hypr"     "$HOME/.config/hypr"
 copy_cfg "$ROOT/config/kitty"    "$HOME/.config/kitty"
 copy_cfg "$ROOT/config/waybar"   "$HOME/.config/waybar"
-copy_cfg "$ROOT/config/hyprlock" "$HOME/.config/hyprlock"
-copy_cfg "$ROOT/config/hypridle" "$HOME/.config/hypridle"
+copy_cfg "$ROOT/config/hyprlock/hyprlock.conf" "$HOME/.config/hypr/hyprlock.conf"
+copy_cfg "$ROOT/config/hypridle/hypridle.conf" "$HOME/.config/hypr/hypridle.conf"
 copy_cfg "$ROOT/config/mako"     "$HOME/.config/mako"
 copy_cfg "$ROOT/config/fuzzel"   "$HOME/.config/fuzzel"
 copy_cfg "$ROOT/config/gtk"      "$HOME/.config/gtk-3.0"
@@ -108,10 +252,12 @@ copy_cfg "$ROOT/config/qt"       "$HOME/.config/qt6ct"
 run mkdir -p "$HOME/.config/hypr/assets" "$HOME/.config/hyprglass/docs"
 run cp -a "$ROOT/assets/wallpapers" "$HOME/.config/hypr/assets/"
 run cp -a "$ROOT/docs/shortcuts.md" "$HOME/.config/hyprglass/docs/shortcuts.md"
+write_source_root
+configure_path
 
 if [[ $DRY -eq 0 ]]; then chmod +x "$ROOT"/scripts/*.sh || true; fi
 
-# ── Systemd services ─────────────────────────────────────────────────────────
+# Systemd services
 if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 ]]; then
   if ask "Enable NetworkManager, bluetooth, and ModemManager services now?"; then
     sudo systemctl enable --now \
@@ -119,15 +265,22 @@ if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 ]]; th
   fi
 fi
 
-# ── Reload Hyprland if running ───────────────────────────────────────────────
+# Reload Hyprland if running
 if [[ $DRY -eq 0 && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
   echo "Hyprland session detected — reloading config..."
   run hyprctl reload
   echo "Config reloaded."
 fi
 
-# ── Summary ──────────────────────────────────────────────────────────────────
-if [[ $UPDATE -eq 1 ]]; then
+# Summary
+if [[ $DRY -eq 1 ]]; then
+  cat <<MSG
+
+Hyprglass dry run complete.
+No files, packages, services, or configs were changed.
+Backups would be written under: $backup
+MSG
+elif [[ $UPDATE -eq 1 ]]; then
   cat <<MSG
 
 Hyprglass update complete.

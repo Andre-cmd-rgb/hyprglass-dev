@@ -18,6 +18,10 @@ type Result struct {
 	Status string  `json:"status"`
 	Checks []Check `json:"checks"`
 }
+type requiredFile struct {
+	RepoPath      string
+	InstalledPath string
+}
 
 func Run(r command.Runner) Result {
 	var cs []Check
@@ -49,16 +53,25 @@ func Run(r command.Runner) Result {
 	} else {
 		add("user level", "pass", "not root", "")
 	}
-	for _, p := range []string{"config/hypr/hyprland.conf", "config/waybar/config.jsonc", "config/waybar/style.css", "config/kitty/kitty.conf", "assets/wallpapers/hyprglass-dusk.png"} {
-		if _, err := os.Stat(p); err == nil {
-			add("repo file: "+p, "pass", "exists", "")
+	files := []requiredFile{
+		{RepoPath: "config/hypr/hyprland.conf", InstalledPath: ".config/hypr/hyprland.conf"},
+		{RepoPath: "config/hyprlock/hyprlock.conf", InstalledPath: ".config/hypr/hyprlock.conf"},
+		{RepoPath: "config/hypridle/hypridle.conf", InstalledPath: ".config/hypr/hypridle.conf"},
+		{RepoPath: "config/waybar/config.jsonc", InstalledPath: ".config/waybar/config.jsonc"},
+		{RepoPath: "config/waybar/style.css", InstalledPath: ".config/waybar/style.css"},
+		{RepoPath: "config/kitty/kitty.conf", InstalledPath: ".config/kitty/kitty.conf"},
+		{RepoPath: "assets/wallpapers/hyprglass-dusk.png", InstalledPath: ".config/hypr/assets/wallpapers/hyprglass-dusk.png"},
+	}
+	for _, f := range files {
+		if _, err := os.Stat(f.RepoPath); err == nil {
+			add("repo file: "+f.RepoPath, "pass", "exists", "")
 		} else {
 			home, _ := os.UserHomeDir()
-			alt := filepath.Join(home, ".config", strings.TrimPrefix(p, "config/"))
+			alt := filepath.Join(home, f.InstalledPath)
 			if _, e := os.Stat(alt); e == nil {
-				add("installed file: "+p, "pass", "exists in ~/.config", "")
+				add("installed file: "+f.RepoPath, "pass", "exists in ~/"+f.InstalledPath, "")
 			} else {
-				add("file: "+p, "warn", "not found in cwd or installed config", "Run from repo root or install configs")
+				add("file: "+f.RepoPath, "warn", "not found in cwd or installed config", "Run from repo root or install configs")
 			}
 		}
 	}

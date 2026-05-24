@@ -30,8 +30,25 @@ referenced in an exec field.
 
 ## Lock screen blank / no background
 
-`hyprlock` looks for `~/.config/hypr/assets/wallpapers/hyprglass-dusk.png`. Confirm
-`install.sh` was run and the wallpaper was copied. Run `ls ~/.config/hypr/assets/` to verify.
+`hyprlock` reads `~/.config/hypr/hyprlock.conf`, which points at
+`~/.config/hypr/assets/wallpapers/hyprglass-dusk.png`. Confirm `install.sh`
+was run and the wallpaper was copied. Run `ls ~/.config/hypr/assets/` to verify.
+
+## `hyprglass: command not found`
+
+The binary is installed to `~/.local/bin/hyprglass`. The installer writes PATH
+setup to your shell startup file and `~/.profile`, but the current terminal cannot
+inherit that change. Open a new terminal or run:
+
+```
+exec $SHELL -l
+```
+
+For the current terminal only:
+
+```
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ## Black screen after login
 

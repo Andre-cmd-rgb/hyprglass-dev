@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"hyprglass/internal/audio"
 	"hyprglass/internal/bluetooth"
@@ -17,7 +19,10 @@ import (
 	"hyprglass/internal/wifi"
 )
 
-const version = "0.1.0"
+var (
+	version    = "0.1.0"
+	sourceRoot = ""
+)
 
 func main() {
 	r := command.RealRunner{}
@@ -57,7 +62,12 @@ func main() {
 		repair()
 	case "wallpaper":
 		if len(args) > 1 && args[1] == "generate" {
-			script := filepath.Join(repoRoot(), "scripts", "generate-wallpaper.py")
+			root := findSourceRoot()
+			if root == "" {
+				fmt.Println("wallpaper generation requires a Hyprglass source checkout")
+				os.Exit(1)
+			}
+			script := filepath.Join(root, "scripts", "generate-wallpaper.py")
 			out, err := r.Run("python3", script)
 			if err != nil {
 				fmt.Println("wallpaper generation failed:", err)
@@ -82,7 +92,6 @@ func contains(xs []string, s string) bool {
 	}
 	return false
 }
-func repoRoot() string { cwd, _ := os.Getwd(); return cwd }
 func help() {
 	fmt.Print(`Hyprglass is a fast, glassy Wayland desktop built on Hyprland for focused work.
 
@@ -97,10 +106,29 @@ Usage:
 `)
 }
 func update() {
-	fmt.Println("Hyprglass V0 does not auto-update without consent. Run: sudo pacman -Syu, then rerun hyprglass doctor")
+	root := findSourceRoot()
+	if root == "" {
+		fmt.Println("Hyprglass could not find its source checkout, so it cannot auto-update. Run: sudo pacman -Syu, then rerun hyprglass doctor")
+		return
+	}
+	script := filepath.Join(root, "install.sh")
+	if _, err := os.Stat(script); err != nil {
+		fmt.Println("Hyprglass could not find install.sh in its source checkout, so it cannot auto-update. Run: sudo pacman -Syu, then rerun hyprglass doctor")
+		return
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		fmt.Println("bash is required to run the Hyprglass updater:", err)
+		os.Exit(1)
+	}
+	fmt.Println("Running:", script, "--update")
+	if err := syscall.Exec(bash, []string{bash, script, "--update"}, os.Environ()); err != nil {
+		fmt.Println("could not start updater:", err)
+		os.Exit(1)
+	}
 }
 func repair() {
-	fmt.Println(strings.TrimSpace(`Hyprglass repair runs only non-destructive checks in V0.
+	msg := `Hyprglass repair runs only non-destructive checks in V0.
 Targeted restarts you may choose manually:
   systemctl --user restart xdg-desktop-portal xdg-desktop-portal-hyprland
   pkill waybar; waybar &
@@ -108,5 +136,52 @@ Targeted restarts you may choose manually:
   sudo systemctl restart NetworkManager
   sudo systemctl restart bluetooth
   sudo systemctl restart ModemManager
-Networking restarts are not automatic because they can drop your current session.`))
+Networking restarts are not automatic because they can drop your current session.`
+	fmt.Println(strings.TrimSpace(msg))
+}
+
+func findSourceRoot() string {
+	var candidates []string
+	add := func(p string) {
+		if p != "" {
+			candidates = append(candidates, p)
+		}
+	}
+	add(sourceRoot)
+	if home, err := os.UserHomeDir(); err == nil {
+		if b, err := os.ReadFile(filepath.Join(home, ".config", "hyprglass", "source-root")); err == nil {
+			add(strings.TrimSpace(string(b)))
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		for {
+			add(cwd)
+			parent := filepath.Dir(cwd)
+			if parent == cwd {
+				break
+			}
+			cwd = parent
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		add(filepath.Dir(exe))
+	}
+	for _, c := range candidates {
+		if isSourceRoot(c) {
+			return c
+		}
+	}
+	return ""
+}
+
+func isSourceRoot(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	for _, p := range []string{"install.sh", "cmd/hyprglass/main.go"} {
+		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+			return false
+		}
+	}
+	return true
 }

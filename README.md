@@ -18,10 +18,30 @@ Install:
 ./install.sh --yes
 ```
 
+After install, open a new terminal or run:
+
+```sh
+exec $SHELL -l
+```
+
+The installer adds `~/.local/bin` to your shell startup files so `hyprglass` is available on `PATH`.
+
 Skip packages:
 
 ```sh
 ./install.sh --no-packages --yes
+```
+
+Update an existing checkout and refresh configs:
+
+```sh
+hyprglass update
+```
+
+or from the repo:
+
+```sh
+./install.sh --update
 ```
 
 Run checks:

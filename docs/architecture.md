@@ -4,7 +4,7 @@ Hyprglass V0 is a repository that installs a disciplined Hyprland workstation la
 
 The installer is idempotent, backs up existing configs, installs official Arch packages when pacman is available, builds one Go binary, and copies configs into `~/.config`.
 
-Config layout mirrors the runtime: Hyprland is modular under `config/hypr/conf.d`; Waybar, Kitty, hyprlock, hypridle, mako, fuzzel, GTK, and Qt configs live in their own folders.
+Config layout mirrors the runtime: Hyprland is modular under `config/hypr/conf.d`; Waybar, Kitty, mako, fuzzel, GTK, and Qt configs live in their own folders. Hyprlock and hypridle source configs live under `config/hyprlock` and `config/hypridle`, but install into `~/.config/hypr/hyprlock.conf` and `~/.config/hypr/hypridle.conf`, which are the default paths used by those tools.
 
 The Go binary owns user-facing checks and terminal-native control surfaces. All external commands go through `internal/command.Runner`, so tests can mock nmcli, bluetoothctl, mmcli, wpctl, and hyprctl output without requiring hardware.
 
