@@ -2,7 +2,14 @@
 set -euo pipefail
 
 # Argument parsing
-YES=0 DRY=0 NO_PACKAGES=0 CONFIGS_ONLY=0 UPDATE=0
+YES=0 DRY=0 NO_PACKAGES=0 CONFIGS_ONLY=0 UPDATE=0 SKIP_SETUP=0
+SETUP_THEME=dark
+SETUP_ACCENT=graphite
+SETUP_LAYOUT=us
+SETUP_VARIANT=
+SETUP_SCALE=auto
+SETUP_MODEM_APN=
+SETUP_MODEM_PIN=
 PREFIX="${HYPRGLASS_PREFIX:-${HOME}/.local/bin}"
 
 for a in "$@"; do
@@ -12,6 +19,7 @@ for a in "$@"; do
     --no-packages)  NO_PACKAGES=1 ;;
     --configs-only) CONFIGS_ONLY=1; NO_PACKAGES=1 ;;
     --update)       UPDATE=1; YES=1; NO_PACKAGES=1 ;;
+    --skip-setup)   SKIP_SETUP=1 ;;
     --help|-h)
       cat <<HELP
 Usage: install.sh [options]
@@ -23,6 +31,7 @@ Usage: install.sh [options]
   --configs-only   Skip pacman and binary build; configs only
   --yes            Overwrite existing configs without prompting
   --dry-run        Print what would happen; make no changes
+  --skip-setup     Use defaults instead of first-setup questions
   --help           Show this help
 
 Examples:
@@ -36,7 +45,7 @@ HELP
   esac
 done
 
-if [[ ${EUID} -eq 0 && $DRY -ne 1 ]]; then
+if [[ ${EUID} -eq 0 && $DRY -ne 1 && "${HYPRGLASS_ALLOW_ROOT:-0}" != 1 ]]; then
   echo "Do not run install.sh as root. It calls sudo only where needed."
   exit 1
 fi
@@ -47,6 +56,64 @@ ask(){
   [[ $YES -eq 1 || $DRY -eq 1 ]] && return 0
   read -r -p "$1 [y/N] " ans
   [[ $ans == y || $ans == Y ]]
+}
+
+prompt_default() {
+  local var_name="$1" label="$2" default="$3" answer
+  if [[ $YES -eq 1 || $DRY -eq 1 || $SKIP_SETUP -eq 1 ]]; then
+    printf -v "$var_name" '%s' "$default"
+    return 0
+  fi
+  read -r -p "$label [$default]: " answer
+  printf -v "$var_name" '%s' "${answer:-$default}"
+}
+
+run_first_setup() {
+  [[ $UPDATE -eq 0 ]] || return 0
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ first setup would ask theme, accent, keyboard layout, display scale, and modem defaults"
+    return 0
+  fi
+  [[ $YES -eq 0 && $SKIP_SETUP -eq 0 ]] || return 0
+  cat <<MSG
+
+==> Hyprglass first setup
+Choose sane defaults now. You can change all of this later with Super+I.
+MSG
+  prompt_default SETUP_THEME "Theme mode: dark or light" "dark"
+  prompt_default SETUP_ACCENT "Accent: graphite, blue, cyan, green, orange, red, pink, purple" "graphite"
+  prompt_default SETUP_LAYOUT "Keyboard layout: us, it, es, gb, de" "us"
+  prompt_default SETUP_VARIANT "Keyboard variant, empty is fine" ""
+  prompt_default SETUP_SCALE "Display scale: auto, 1.25, 1.5, 1.75, 2" "auto"
+  read -r -p "Configure LTE/5G modem APN now? empty skips: " SETUP_MODEM_APN
+  if [[ -n "$SETUP_MODEM_APN" ]]; then
+    read -r -s -p "SIM PIN for autounlock, empty skips PIN storage: " SETUP_MODEM_PIN
+    printf '\n'
+  fi
+}
+
+json_escape() {
+  python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+write_preferences_json() {
+  local dst="$HOME/.config/hyprglass/preferences.json"
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ write Hyprglass preferences to $dst"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cat >"$dst" <<EOF
+{
+  "themeMode": $(json_escape "$SETUP_THEME"),
+  "accent": $(json_escape "$SETUP_ACCENT"),
+  "keyboardLayout": $(json_escape "$SETUP_LAYOUT"),
+  "keyboardVariant": $(json_escape "$SETUP_VARIANT"),
+  "monitorScale": $(json_escape "$SETUP_SCALE"),
+  "modemApn": $(json_escape "$SETUP_MODEM_APN"),
+  "modemPinSet": false
+}
+EOF
 }
 
 ensure_executable_bits() {
@@ -194,8 +261,13 @@ configure_desktop_theme() {
     return 0
   fi
   if command -v gsettings >/dev/null 2>&1; then
-    gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface gtk-theme Adwaita-dark 2>/dev/null || true
+    if [[ "$SETUP_THEME" == light ]]; then
+      gsettings set org.gnome.desktop.interface color-scheme prefer-light 2>/dev/null || true
+      gsettings set org.gnome.desktop.interface gtk-theme Adwaita 2>/dev/null || true
+    else
+      gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+      gsettings set org.gnome.desktop.interface gtk-theme Adwaita-dark 2>/dev/null || true
+    fi
   fi
 }
 
@@ -213,6 +285,31 @@ preload = $wallpaper
 wallpaper = , $wallpaper
 splash = false
 EOF
+}
+
+write_installed_hyprlock_config() {
+  local wallpaper="$HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png"
+  local dst="$HOME/.config/hypr/hyprlock.conf"
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ write absolute wallpaper path to $dst"
+    return 0
+  fi
+  [[ -f "$dst" ]] || return 0
+  python3 - "$dst" "$wallpaper" <<'PYLOCK'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+wallpaper = sys.argv[2]
+data = path.read_text()
+lines = []
+for line in data.splitlines():
+    if line.strip().startswith('path') and 'hyprglass-dusk.png' in line:
+        indent = line[:len(line)-len(line.lstrip())]
+        lines.append(f'{indent}path        = {wallpaper}')
+    else:
+        lines.append(line)
+path.write_text('\n'.join(lines) + '\n')
+PYLOCK
 }
 
 ensure_current_shell_command() {
@@ -291,6 +388,7 @@ verify_installed_configs() {
   [[ -f "$HOME/.config/waybar/config.jsonc" ]] || { echo "Install failed: missing ~/.config/waybar/config.jsonc"; exit 1; }
   [[ -f "$HOME/.config/waybar/style.css" ]] || { echo "Install failed: missing ~/.config/waybar/style.css"; exit 1; }
   [[ -f "$HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png" ]] || { echo "Install failed: missing Hyprglass wallpaper asset"; exit 1; }
+  [[ -f "$HOME/.config/hypr/conf.d/theme.conf" ]] || { echo "Install failed: missing Hyprglass theme config"; exit 1; }
   grep -Fq "Hyprglass main Hyprland config" "$HOME/.config/hypr/hyprland.conf" || {
     echo "Install failed: ~/.config/hypr/hyprland.conf was not replaced with Hyprglass config"
     exit 1
@@ -298,6 +396,7 @@ verify_installed_configs() {
 }
 
 ensure_executable_bits
+run_first_setup
 
 # --update: pull latest from git
 if [[ $UPDATE -eq 1 ]]; then
@@ -390,6 +489,11 @@ run mkdir -p "$HOME/.config/hypr/assets" "$HOME/.config/hyprglass/docs"
 run cp -a "$ROOT/assets/wallpapers" "$HOME/.config/hypr/assets/"
 run cp -a "$ROOT/docs/shortcuts.md" "$HOME/.config/hyprglass/docs/shortcuts.md"
 write_installed_hyprpaper_config
+write_installed_hyprlock_config
+write_preferences_json
+if [[ $DRY -eq 0 && $CONFIGS_ONLY -eq 0 && -x "$PREFIX/hyprglass" ]]; then
+  "$PREFIX/hyprglass" settings apply --no-reload >/dev/null || true
+fi
 write_source_root
 configure_path
 configure_desktop_theme
@@ -409,10 +513,18 @@ enable_service_if_present() {
 }
 
 if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 ]]; then
-  if ask "Enable laptop/network services now?"; then
+  if ask "Enable network, Bluetooth, modem, and power services now?"; then
     for svc in NetworkManager.service bluetooth.service ModemManager.service power-profiles-daemon.service; do
       enable_service_if_present "$svc"
     done
+  fi
+fi
+
+if [[ $DRY -eq 0 && $UPDATE -eq 0 && -n "$SETUP_MODEM_APN" && -x "$ROOT/scripts/hyprglass-modem-autounlock-install.sh" ]]; then
+  if ask "Install modem autounlock/autoconnect service?"; then
+    args=("$ROOT/scripts/hyprglass-modem-autounlock-install.sh" --apn "$SETUP_MODEM_APN")
+    [[ -n "$SETUP_MODEM_PIN" ]] && args+=(--pin "$SETUP_MODEM_PIN")
+    sudo bash "${args[@]}"
   fi
 fi
 
@@ -449,7 +561,7 @@ else
 Hyprglass install complete.
 Start Hyprland from your login/session manager or TTY.
 Run: hyprglass doctor
-Open TUIs with Super+W/B/M/A/D inside Hyprland.
+Open Hyprglass Settings with Super+I or Super+comma inside Hyprland.
 Backups: $backup
 MSG
 fi

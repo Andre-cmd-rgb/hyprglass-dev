@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"hyprglass/internal/appsettings"
 	"hyprglass/internal/audio"
 	"hyprglass/internal/bluetooth"
 	"hyprglass/internal/command"
@@ -64,7 +65,7 @@ func main() {
 	case "laptop":
 		laptop.RunTUI(r, args[1:])
 	case "settings":
-		settings(r)
+		appsettings.Run(r, args[1:], version)
 	case "power":
 		power(r)
 	case "visualizer", "cava":
@@ -162,42 +163,6 @@ func power(r command.Runner) {
 		return
 	}
 	fmt.Println("Unknown selection.")
-}
-
-func settings(r command.Runner) {
-	tui.Header("Settings")
-	home, _ := os.UserHomeDir()
-	paths := []string{
-		".config/hypr/hyprland.conf",
-		".config/hypr/hyprpaper.conf",
-		".config/waybar/config.jsonc",
-		".config/waybar/style.css",
-		".config/kitty/kitty.conf",
-		".config/gtk-3.0/settings.ini",
-		".config/gtk-4.0/settings.ini",
-	}
-	for _, p := range paths {
-		status := "missing"
-		if _, err := os.Stat(filepath.Join(home, p)); err == nil {
-			status = "ok"
-		}
-		fmt.Printf("%-38s %s\n", "~/"+p, status)
-	}
-	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  hyprglass wallpaper apply      apply and reload Hyprglass wallpaper")
-	fmt.Println("  hyprglass laptop               battery, thermal, sleep, profile")
-	fmt.Println("  hyprglass power                open power actions")
-	fmt.Println("  hyprglass info                 system summary via pfetch/fastfetch")
-	fmt.Println("  hyprglass cava                 audio visualizer")
-	fmt.Println("  hyprglass touchid status       check fingerprint tools")
-	fmt.Println("  hyprglass doctor               run health checks")
-	if r.Exists("gsettings") {
-		out, _ := r.Run("gsettings", "get", "org.gnome.desktop.interface", "color-scheme")
-		if value := cleanGSettingsValue(out); value != "" {
-			fmt.Println("GTK color-scheme:", value)
-		}
-	}
 }
 
 func info(r command.Runner) {

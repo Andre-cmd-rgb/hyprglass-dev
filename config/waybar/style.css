@@ -7,10 +7,10 @@
 }
 
 window#waybar {
-  background: rgba(7, 11, 26, 0.78);
-  border: 1px solid rgba(129, 140, 248, 0.42);
-  border-radius: 10px;
-  color: #dbeafe;
+  background: rgba(15, 17, 21, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 13px;
+  color: #f2f2ec;
 }
 
 .modules-left,
@@ -21,57 +21,44 @@ window#waybar {
 }
 
 #custom-logo {
-  color: #c084fc;
+  color: #f2f2ec;
   font-weight: 700;
   padding: 0 10px 0 4px;
 }
 
-#workspaces {
-  padding: 0 4px;
-}
+#workspaces { padding: 0 4px; }
 
 #workspaces button {
   background: transparent;
-  color: #94a3b8;
+  color: #a5adba;
   padding: 0 9px;
   margin: 0 1px;
 }
 
 #workspaces button.active {
-  color: #070b1a;
-  background: linear-gradient(90deg, #c084fc, #60a5fa);
-  border-radius: 8px;
+  color: #0f1115;
+  background: #8ea8ff;
+  border-radius: 9px;
 }
 
 #clock,
 #network,
 #custom-bluetooth,
 #pulseaudio,
+#backlight,
 #battery,
-#custom-laptop,
+#custom-settings,
 #custom-power {
-  color: #dbeafe;
+  color: #f2f2ec;
   padding: 0 9px;
   margin: 0 1px;
 }
 
-#clock {
-  color: #c7d2fe;
-}
-
-#custom-power {
-  color: #f0abfc;
-}
-
-#custom-laptop {
-  color: #93c5fd;
-}
-
+#clock { color: #d9dddf; }
+#custom-settings { color: #8ea8ff; }
+#custom-power { color: #ffb4a8; }
 #network.disconnected,
-#battery.warning {
-  color: #facc15;
-}
-
-#battery.critical {
-  color: #fb7185;
-}
+#battery.warning { color: #ffd166; }
+#battery.critical { color: #ff7b87; }
+#custom-bluetooth.off { color: #7f8792; }
+#custom-bluetooth.on { color: #8ea8ff; }
