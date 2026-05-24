@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -167,11 +168,9 @@ func profiles(r command.Runner) []string {
 	if err != nil {
 		return defaults
 	}
-	seen := map[string]bool{}
 	var ps []string
 	for _, p := range defaults {
 		if strings.Contains(out, p) {
-			seen[p] = true
 			ps = append(ps, p)
 		}
 	}
@@ -187,7 +186,7 @@ func setProfile(r command.Runner, args []string, available []string) {
 		return
 	}
 	profile := args[0]
-	if !contains(available, profile) {
+	if !slices.Contains(available, profile) {
 		fmt.Println("Power profile is unavailable on this machine:", profile)
 		return
 	}
@@ -347,13 +346,4 @@ func readFile(path string) string {
 func readInt(path string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(readFile(path)))
 	return n
-}
-
-func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

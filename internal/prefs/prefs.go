@@ -411,14 +411,6 @@ gestures {
 `, p.KeyboardLayout, p.KeyboardVariant)
 }
 
-func monitorConfig(p Preferences) string {
-	scale := p.MonitorScale
-	if scale == "" {
-		scale = "auto"
-	}
-	return monitorConfigWithScale(scale)
-}
-
 func monitorConfigWithScale(scale string) string {
 	if scale == "" {
 		scale = "auto"

@@ -4,26 +4,27 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"syscall"
-	"time"
-
 	"hyprglass/internal/appsettings"
 	"hyprglass/internal/audio"
 	"hyprglass/internal/bluetooth"
 	"hyprglass/internal/command"
 	"hyprglass/internal/display"
 	"hyprglass/internal/doctor"
+	"hyprglass/internal/fileutil"
 	"hyprglass/internal/icons"
 	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
+	"hyprglass/internal/srcroot"
 	hgsystem "hyprglass/internal/system"
 	"hyprglass/internal/tui"
 	"hyprglass/internal/wifi"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"syscall"
+	"time"
 )
 
 var (
@@ -47,7 +48,7 @@ func main() {
 		icons.Run(r, args[1:])
 	case "doctor":
 		res := doctor.Run(r)
-		if contains(args[1:], "--json") {
+		if slices.Contains(args[1:], "--json") {
 			b, _ := json.MarshalIndent(res, "", "  ")
 			fmt.Println(string(b))
 			return
@@ -56,7 +57,7 @@ func main() {
 	case "wifi":
 		wifi.RunTUI(r)
 	case "bluetooth":
-		if contains(args[1:], "--status") {
+		if slices.Contains(args[1:], "--status") {
 			bluetooth.PrintWaybarStatus(r)
 			return
 		}
@@ -70,7 +71,7 @@ func main() {
 	case "laptop":
 		laptop.RunTUI(r, args[1:])
 	case "settings":
-		appsettings.Run(r, args[1:], version)
+		appsettings.Run(r, args[1:], version, sourceRoot)
 	case "system", "cachyos":
 		hgsystem.RunTUI(r, args[1:])
 	case "power":
@@ -91,14 +92,7 @@ func main() {
 		os.Exit(2)
 	}
 }
-func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
+
 func help() {
 	fmt.Print(`Hyprglass is a fast, glassy Wayland desktop built on Hyprland for focused work.
 
@@ -116,6 +110,7 @@ Usage:
   hyprglass wallpaper [apply|generate]
 `)
 }
+
 func power(r command.Runner) {
 	type action struct {
 		Key         string
@@ -139,8 +134,7 @@ func power(r command.Runner) {
 		fmt.Printf("  %s  %s\n", a.Key, a.Label)
 	}
 	fmt.Print("\nSelect: ")
-	choice, _ := reader.ReadString('\n')
-	choice = strings.TrimSpace(strings.ToLower(choice))
+	choice := strings.TrimSpace(strings.ToLower(tui.ReadLine(reader)))
 	for _, a := range actions {
 		if choice != a.Key {
 			continue
@@ -155,8 +149,8 @@ func power(r command.Runner) {
 		}
 		if a.Destructive {
 			fmt.Printf("Type yes to confirm %q: ", a.Label)
-			confirm, _ := reader.ReadString('\n')
-			if strings.TrimSpace(strings.ToLower(confirm)) != "yes" {
+			confirm := strings.TrimSpace(strings.ToLower(tui.ReadLine(reader)))
+			if confirm != "yes" {
 				fmt.Println("Canceled.")
 				return
 			}
@@ -267,7 +261,7 @@ func wallpaper(r command.Runner, args []string) {
 	if len(args) > 0 {
 		mode = args[0]
 	}
-	root := findSourceRoot()
+	root := srcroot.Find(sourceRoot)
 	if root == "" {
 		fmt.Println("wallpaper commands require a Hyprglass source checkout")
 		os.Exit(1)
@@ -296,8 +290,9 @@ func wallpaper(r command.Runner, args []string) {
 	restartHyprpaper(r, installed)
 	fmt.Println("Wallpaper installed to ~/.config/hypr/assets/wallpapers/hyprglass-dusk.png")
 }
+
 func update() {
-	root := findSourceRoot()
+	root := srcroot.Find(sourceRoot)
 	if root == "" {
 		fmt.Println("Hyprglass could not find its source checkout, so it cannot auto-update. Run: sudo pacman -Syu, then rerun hyprglass doctor")
 		return
@@ -319,18 +314,19 @@ func update() {
 		os.Exit(1)
 	}
 }
+
 func repair() {
 	r := command.RealRunner{}
 	fmt.Println("Hyprglass repair: refreshing generated config, wallpaper, and session surfaces.")
-	root := findSourceRoot()
-	wallpaper := ""
+	root := srcroot.Find(sourceRoot)
+	wallpaperPath := ""
 	if root != "" {
 		source := filepath.Join(root, "assets", "wallpapers", "hyprglass-dusk.png")
 		installed, err := installWallpaper(root, source)
 		if err != nil {
 			fmt.Println("Wallpaper repair failed:", err)
 		} else {
-			wallpaper = installed
+			wallpaperPath = installed
 			fmt.Println("Wallpaper config repaired.")
 		}
 	} else {
@@ -340,65 +336,18 @@ func repair() {
 		fmt.Println("Not inside Hyprland; session components were not restarted.")
 		return
 	}
-	if wallpaper != "" {
-		restartHyprpaper(r, wallpaper)
+	if wallpaperPath != "" {
+		restartHyprpaper(r, wallpaperPath)
 	}
 	if r.Exists("pkill") {
 		_, _ = r.Run("pkill", "-x", "waybar")
 		_, _ = r.Run("pkill", "-x", "mako")
 		_, _ = r.Run("pkill", "-x", "hypridle")
 	}
-	startDetachedCommand("waybar")
-	startDetachedCommand("mako")
-	startDetachedCommand("hypridle")
+	tui.Launch("waybar")
+	tui.Launch("mako")
+	tui.Launch("hypridle")
 	fmt.Println("Waybar, mako, and hypridle restarted. Network services were not touched.")
-}
-
-func findSourceRoot() string {
-	var candidates []string
-	add := func(p string) {
-		if p != "" {
-			candidates = append(candidates, p)
-		}
-	}
-	add(os.Getenv("HYPRGLASS_SOURCE_ROOT"))
-	add(sourceRoot)
-	if home, err := os.UserHomeDir(); err == nil {
-		if b, err := os.ReadFile(filepath.Join(home, ".config", "hyprglass", "source-root")); err == nil {
-			add(strings.TrimSpace(string(b)))
-		}
-	}
-	if cwd, err := os.Getwd(); err == nil {
-		for {
-			add(cwd)
-			parent := filepath.Dir(cwd)
-			if parent == cwd {
-				break
-			}
-			cwd = parent
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		add(filepath.Dir(exe))
-	}
-	for _, c := range candidates {
-		if isSourceRoot(c) {
-			return c
-		}
-	}
-	return ""
-}
-
-func isSourceRoot(dir string) bool {
-	if dir == "" {
-		return false
-	}
-	for _, p := range []string{"install.sh", "cmd/hyprglass/main.go"} {
-		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
-			return false
-		}
-	}
-	return true
 }
 
 func ensureExecutableBits(root string) {
@@ -423,7 +372,7 @@ func installWallpaper(root, source string) (string, error) {
 		return "", err
 	}
 	target := filepath.Join(targetDir, "hyprglass-dusk.png")
-	if err := copyFile(source, target); err != nil {
+	if err := fileutil.Copy(source, target); err != nil {
 		return "", err
 	}
 	return target, writeHyprpaperConfig(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), target)
@@ -447,26 +396,6 @@ ipc = true
 	return os.WriteFile(path, []byte(data), 0o644)
 }
 
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
-}
-
 func restartHyprpaper(r command.Runner, wallpaper string) {
 	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
 		return
@@ -488,26 +417,6 @@ func restartHyprpaper(r command.Runner, wallpaper string) {
 	}
 }
 
-func startDetachedCommand(name string) {
-	if _, err := exec.LookPath(name); err != nil {
-		return
-	}
-	devNull, _ := os.OpenFile(os.DevNull, os.O_RDWR, 0)
-	if devNull != nil {
-		defer devNull.Close()
-	}
-	cmd := exec.Command(name)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if devNull != nil {
-		cmd.Stdin = devNull
-		cmd.Stdout = devNull
-		cmd.Stderr = devNull
-	}
-	if err := cmd.Start(); err == nil {
-		_ = cmd.Process.Release()
-	}
-}
-
 func firstLines(s string, limit int) []string {
 	var lines []string
 	for _, line := range strings.Split(s, "\n") {
@@ -521,18 +430,6 @@ func firstLines(s string, limit int) []string {
 		}
 	}
 	return lines
-}
-
-func cleanGSettingsValue(out string) string {
-	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" || strings.HasPrefix(line, "(") {
-			continue
-		}
-		return line
-	}
-	return ""
 }
 
 func filterDconfWarnings(out string) string {

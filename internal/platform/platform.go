@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ func ParseOSRelease(data string) Info {
 		IDLike:     idLike,
 		CachyOS:    id == "cachyos",
 	}
-	info.ArchLike = id == "arch" || id == "cachyos" || contains(idLike, "arch") || contains(idLike, "archlinux")
+	info.ArchLike = id == "arch" || id == "cachyos" || slices.Contains(idLike, "arch") || slices.Contains(idLike, "archlinux")
 	return info
 }
 
@@ -80,13 +81,4 @@ func fieldsLower(v string) []string {
 		out = append(out, strings.ToLower(f))
 	}
 	return out
-}
-
-func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
 }

@@ -77,7 +77,7 @@ func menu(r command.Runner) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		st := Collect(r)
-		clear()
+		tui.Clear()
 		tui.Header("System")
 		fmt.Println("distro:", st.Platform.DisplayName())
 		fmt.Println("arch-like:", yesNo(st.Platform.ArchLike))
@@ -94,24 +94,24 @@ func menu(r command.Runner) {
 		fmt.Println("  4  Run CachyOS hardware auto-configuration")
 		fmt.Println("  q  Back")
 		fmt.Print("\nSelect: ")
-		switch strings.ToLower(readLine(reader)) {
+		switch strings.ToLower(tui.ReadLine(reader)) {
 		case "1":
 			runSystemUpdate(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "2":
 			runCachyRateMirrors(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "3":
 			runCHWDList(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "4":
 			runCHWDAuto(r)
-			pause(reader)
+			tui.Pause(reader)
 		case "q", "":
 			return
 		default:
 			fmt.Println("Unknown selection.")
-			pause(reader)
+			tui.Pause(reader)
 		}
 	}
 }
@@ -181,22 +181,6 @@ func confirm(prompt string) bool {
 	fmt.Printf("%s? Type yes: ", prompt)
 	answer, _ := reader.ReadString('\n')
 	return strings.TrimSpace(strings.ToLower(answer)) == "yes"
-}
-
-func readLine(r *bufio.Reader) string {
-	line, _ := r.ReadString('\n')
-	return strings.TrimSpace(line)
-}
-
-func pause(r *bufio.Reader) {
-	fmt.Print("\nPress Enter to continue.")
-	_, _ = r.ReadString('\n')
-}
-
-func clear() {
-	if os.Getenv("TERM") != "" {
-		fmt.Print("\033[H\033[2J")
-	}
 }
 
 func yesNo(v bool) string {

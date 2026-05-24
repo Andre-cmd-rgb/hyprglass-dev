@@ -32,7 +32,7 @@ hyprglass system chwd-auto
 
 On CachyOS, Hyprglass should stay thin and let CachyOS provide the speed: optimized repositories, CachyOS kernel choices, mirror tooling, and hardware detection. Hyprglass should provide a clean Hyprland laptop workstation layer on top, not fight the distribution.
 
-## V1.2 hardware setup behavior
+## Hardware auto-configuration
 
 Hyprglass can run CachyOS hardware auto-configuration during install only when explicitly requested:
 

@@ -31,5 +31,5 @@ for d in hypr kitty waybar mako fuzzel gtk-3.0 gtk-4.0 qt6ct hyprglass hyprlock 
   [[ -e "$HOME/.config/$d" ]] && rm -rf "$HOME/.config/$d"
 done
 rm -f "$HOME/.local/bin/hyprglass"
-if [[ $REMOVE_PACKAGES -eq 1 ]]; then echo "Package removal intentionally not automated in V0. Remove packages manually after reviewing dependencies."; fi
+if [[ $REMOVE_PACKAGES -eq 1 ]]; then echo "Package removal is not automated. Remove packages manually after reviewing dependencies."; fi
 echo "Hyprglass configs removed. Backup saved to: $backup"

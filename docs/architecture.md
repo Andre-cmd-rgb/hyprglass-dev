@@ -1,6 +1,6 @@
 # Architecture
 
-Hyprglass V1.1 is a repository that installs a disciplined Hyprland workstation layer on top of Arch Linux or CachyOS. It is not an ISO.
+Hyprglass is a repository that installs a disciplined Hyprland workstation layer on top of Arch Linux or CachyOS. It is not an ISO.
 
 The installer is idempotent, backs up existing configs, chooses an Arch or CachyOS package profile when pacman is available, builds one Go binary, and copies configs into `~/.config`.
 
@@ -8,6 +8,30 @@ Config layout mirrors the runtime: Hyprland is modular under `config/hypr/conf.d
 
 The Go binary owns user-facing checks and terminal-native control surfaces. All external commands go through `internal/command.Runner`, so tests can mock nmcli, bluetoothctl, mmcli, wpctl, hyprctl, pacman, chwd, and CachyOS helper output without requiring hardware.
 
-V1.1 wraps system tools instead of owning system state because Arch/CachyOS already have the right primitives: NetworkManager, BlueZ, ModemManager, PipeWire/WirePlumber, pacman, and Hyprland. Hyprglass should coordinate them cleanly, not replace them.
+Hyprglass wraps system tools instead of owning system state because Arch/CachyOS already have the right primitives: NetworkManager, BlueZ, ModemManager, PipeWire/WirePlumber, pacman, and Hyprland. Hyprglass coordinates them cleanly, not replace them.
 
-Future ISO/image work can reuse this repository after the install/check path is proven. ISO generation is intentionally out of scope for V1.1.
+## Package layout
+
+```
+cmd/hyprglass/        — CLI entry point; dispatches to internal packages
+internal/
+  appsettings/        — Settings TUI menu
+  audio/              — PipeWire/WirePlumber status
+  bluetooth/          — bluetoothctl wrapper
+  command/            — Runner interface + timeout-aware RealRunner + MockRunner
+  display/            — hyprctl monitor info
+  doctor/             — environment health checks
+  fileutil/           — shared file copy helper
+  icons/              — Nerd Font icon/font repair
+  laptop/             — battery, thermals, power profiles
+  lte/                — ModemManager modem status
+  platform/           — /etc/os-release detection
+  prefs/              — user preferences JSON + config generation
+  srcroot/            — source checkout finder (env, ldflags, file, cwd, exe)
+  system/             — system menu (pacman, chwd, cachyos-rate-mirrors)
+  tui/                — shared terminal UI helpers
+  wifi/               — NetworkManager Wi-Fi status
+config/               — Hyprland, Waybar, Kitty, mako, fuzzel, GTK, Qt configs
+packages/             — Arch and CachyOS package lists
+scripts/              — build, check, install helpers
+```
