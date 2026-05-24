@@ -5,11 +5,14 @@ brightnessctl
 cachyos-rate-mirrors
 cava
 chwd
+fontconfig
 fprintd
 fuzzel
 git
 gnome-keyring
 go
+greetd
+greetd-tuigreet
 grim
 hypridle
 hyprland
@@ -33,6 +36,7 @@ python
 python-pillow
 slurp
 ttf-jetbrains-mono-nerd
+ttf-nerd-fonts-symbols-mono
 upower
 waybar
 wireplumber

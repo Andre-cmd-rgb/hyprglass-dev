@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Check struct {
@@ -58,7 +59,7 @@ func Run(r command.Runner) Result {
 	} else {
 		add("hyprland session", "warn", "not inside Hyprland; runtime compositor checks skipped", "Start Hyprland then rerun doctor")
 	}
-	for _, c := range []string{"pacman", "hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go", "brightnessctl", "playerctl", "powerprofilesctl", "sensors", "cava", "pfetch", "uname"} {
+	for _, c := range []string{"pacman", "hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go", "brightnessctl", "playerctl", "powerprofilesctl", "sensors", "cava", "pfetch", "uname", "fc-match", "fc-cache"} {
 		if r.Exists(c) {
 			add("command: "+c, "pass", "found", "")
 		} else {
@@ -69,6 +70,27 @@ func Run(r command.Runner) Result {
 		add("fingerprint tools", "pass", "fprintd commands found", "")
 	} else {
 		add("fingerprint tools", "warn", "fprintd not installed", "Install fprintd to use hyprglass touchid")
+	}
+	if r.Exists("fc-match") {
+		checkFont := func(label, query string) {
+			out, err := r.Run("fc-match", "-f", "%{family}\n", query)
+			family := strings.TrimSpace(out)
+			if err != nil || family == "" {
+				add("font: "+label, "warn", "not detected", "Install ttf-jetbrains-mono-nerd and ttf-nerd-fonts-symbols-mono, then run hyprglass icons repair")
+				return
+			}
+			lower := strings.ToLower(strings.ReplaceAll(family, " ", ""))
+			queryNorm := strings.ToLower(strings.ReplaceAll(query, " ", ""))
+			if strings.Contains(lower, queryNorm) || strings.Contains(lower, "symbolsnerdfont") || strings.Contains(lower, "jetbrainsmono") {
+				add("font: "+label, "pass", family, "")
+			} else {
+				add("font: "+label, "warn", "resolved to "+family, "Run hyprglass icons repair")
+			}
+		}
+		checkFont("JetBrains Mono Nerd", "JetBrainsMono Nerd Font")
+		checkFont("Symbols Nerd Font Mono", "Symbols Nerd Font Mono")
+	} else {
+		add("fontconfig", "warn", "fc-match missing", "Install fontconfig, ttf-jetbrains-mono-nerd, and ttf-nerd-fonts-symbols-mono")
 	}
 	if os.Geteuid() == 0 {
 		add("user level", "warn", "running as root", "Run user-level checks as normal user")

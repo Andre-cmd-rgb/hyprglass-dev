@@ -18,6 +18,7 @@ import (
 	"hyprglass/internal/command"
 	"hyprglass/internal/display"
 	"hyprglass/internal/doctor"
+	"hyprglass/internal/icons"
 	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
 	hgsystem "hyprglass/internal/system"
@@ -42,6 +43,8 @@ func main() {
 		fmt.Println("hyprglass", version)
 	case "info":
 		info(r)
+	case "icons":
+		icons.Run(r, args[1:])
 	case "doctor":
 		res := doctor.Run(r)
 		if contains(args[1:], "--json") {
@@ -104,6 +107,7 @@ Usage:
   hyprglass version
   hyprglass info
   hyprglass doctor [--json]
+  hyprglass icons [status|repair]
   hyprglass wifi | bluetooth | lte | audio | display | laptop | settings | system | power
   hyprglass cava
   hyprglass touchid [status|enroll|verify]

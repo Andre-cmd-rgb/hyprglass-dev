@@ -9,6 +9,7 @@ import (
 	"hyprglass/internal/command"
 	"hyprglass/internal/display"
 	"hyprglass/internal/doctor"
+	"hyprglass/internal/icons"
 	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
 	"hyprglass/internal/prefs"
@@ -26,7 +27,7 @@ func Run(r command.Runner, args []string, version string) {
 	if len(args) > 0 {
 		switch args[0] {
 		case "apply":
-			applyOnly(r, contains(args[1:], "--no-reload"))
+			applyOnly(r, contains(args[1:], "--no-reload"), contains(args[1:], "--with-display") || contains(args[1:], "--display"))
 			return
 		case "defaults":
 			p := prefs.Default()
@@ -34,7 +35,7 @@ func Run(r command.Runner, args []string, version string) {
 				fmt.Println("Could not write defaults:", err)
 				return
 			}
-			if err := prefs.Apply(p); err != nil {
+			if err := prefs.ApplyAll(p); err != nil {
 				fmt.Println("Could not apply defaults:", err)
 				return
 			}
@@ -112,7 +113,7 @@ func appearance(reader *bufio.Reader, r command.Runner) {
 	if accent != "" {
 		p.Accent = accent
 	}
-	saveApplyReload(reader, r, p)
+	saveApplyReload(reader, r, p, prefs.ApplyVisuals)
 }
 
 func displayAndScaling(reader *bufio.Reader, r command.Runner) {
@@ -130,7 +131,7 @@ func displayAndScaling(reader *bufio.Reader, r command.Runner) {
 	if scale != "" {
 		p.MonitorScale = scale
 	}
-	saveApplyReload(reader, r, p)
+	saveApplyReload(reader, r, p, prefs.ApplyDisplay)
 }
 
 func displayKeyboard(reader *bufio.Reader, r command.Runner) {
@@ -159,7 +160,7 @@ func displayKeyboard(reader *bufio.Reader, r command.Runner) {
 	if variant != "" {
 		p.KeyboardVariant = variant
 	}
-	saveApplyReload(reader, r, p)
+	saveApplyReload(reader, r, p, prefs.ApplyDisplayAndInput)
 }
 
 func keyboard(reader *bufio.Reader, r command.Runner) {
@@ -177,7 +178,7 @@ func keyboard(reader *bufio.Reader, r command.Runner) {
 	if variant != "" {
 		p.KeyboardVariant = variant
 	}
-	saveApplyReload(reader, r, p)
+	saveApplyReload(reader, r, p, prefs.ApplyInput)
 }
 
 func wallpaperRepair(reader *bufio.Reader, r command.Runner) {
@@ -239,9 +240,10 @@ func developerOptions(reader *bufio.Reader, r command.Runner) {
 		fmt.Println("  1  Doctor")
 		fmt.Println("  2  Services")
 		fmt.Println("  3  Wallpaper repair")
-		fmt.Println("  4  System and CachyOS")
-		fmt.Println("  5  Raw keyboard page")
-		fmt.Println("  6  Raw display page")
+		fmt.Println("  4  Icon/font repair")
+		fmt.Println("  5  System and CachyOS")
+		fmt.Println("  6  Raw keyboard page")
+		fmt.Println("  7  Raw display page")
 		fmt.Println("  q  Back")
 		fmt.Print("\nSelect: ")
 		switch strings.ToLower(readLine(reader)) {
@@ -253,10 +255,12 @@ func developerOptions(reader *bufio.Reader, r command.Runner) {
 		case "3":
 			wallpaperRepair(reader, r)
 		case "4":
-			hgsystem.RunTUI(r, nil)
+			icons.RunTUI(r)
 		case "5":
-			keyboard(reader, r)
+			hgsystem.RunTUI(r, nil)
 		case "6":
+			keyboard(reader, r)
+		case "7":
 			displayAndScaling(reader, r)
 		case "q", "":
 			return
@@ -362,13 +366,13 @@ func update(reader *bufio.Reader, r command.Runner) {
 	pause(reader)
 }
 
-func saveApplyReload(reader *bufio.Reader, r command.Runner, p prefs.Preferences) {
+func saveApplyReload(reader *bufio.Reader, r command.Runner, p prefs.Preferences, apply func(prefs.Preferences) error) {
 	if err := prefs.Save(p); err != nil {
 		fmt.Println("Could not save preferences:", err)
 		pause(reader)
 		return
 	}
-	if err := prefs.Apply(p); err != nil {
+	if err := apply(p); err != nil {
 		fmt.Println("Could not apply preferences:", err)
 		pause(reader)
 		return
@@ -379,13 +383,17 @@ func saveApplyReload(reader *bufio.Reader, r command.Runner, p prefs.Preferences
 	pause(reader)
 }
 
-func applyOnly(r command.Runner, noReload bool) {
+func applyOnly(r command.Runner, noReload bool, withDisplay bool) {
 	p := prefs.Load()
 	if err := prefs.Save(p); err != nil {
 		fmt.Println("Could not save preferences:", err)
 		return
 	}
-	if err := prefs.Apply(p); err != nil {
+	apply := prefs.Apply
+	if withDisplay {
+		apply = prefs.ApplyAll
+	}
+	if err := apply(p); err != nil {
 		fmt.Println("Could not apply preferences:", err)
 		return
 	}

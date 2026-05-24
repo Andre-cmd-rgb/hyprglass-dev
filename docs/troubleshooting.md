@@ -40,8 +40,19 @@ hyprglass repair
 ## Waybar not showing
 
 Run `waybar` in a terminal and check stderr. Common causes: missing font
-(JetBrainsMono Nerd Font), JSON syntax error in `config.jsonc`, a missing binary
+(JetBrainsMono Nerd Font / Symbols Nerd Font Mono), JSON syntax error in `config.jsonc`, a missing binary
 referenced in an exec field, or invalid GTK CSS. Waybar uses GTK CSS, so Hyprglass avoids 8-digit `#RRGGBBAA` colors in Waybar and writes `rgba(...)` instead.
+
+## Waybar icons are squares / missing
+
+This means the bar is rendering private-use Nerd Font glyphs without the matching font fallback. Repair it with:
+
+```
+hyprglass icons repair
+hyprglass settings apply
+```
+
+The installer now installs `ttf-jetbrains-mono-nerd`, `ttf-nerd-fonts-symbols-mono`, and `fontconfig`, then runs `fc-cache -f`. The Waybar CSS also includes `Symbols Nerd Font Mono` and JetBrains Mono Nerd fallback names so GTK/Pango can resolve icon glyphs reliably.
 
 ## Lock screen blank / no background
 
@@ -68,12 +79,21 @@ For the current terminal only:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Black screen after login
+## Display settings / black screen after login
 
-From a TTY, restore `~/.config/hypr/conf.d/monitors.conf` from the backup folder, or reset it:
+Hyprglass V1.4 preserves existing `~/.config/hypr/conf.d/monitors.conf` during updates and normal Settings applies. Display changes are only made through **Settings → Display, scaling, and keyboard** or `hyprglass settings apply --with-display`.
+
+If you still black-screen after a manual monitor edit, switch to a TTY and restore the backed-up file from `~/.config/hyprglass-backups/<timestamp>/hypr/conf.d/monitors.conf`, or reset to a safe universal rule:
+
 ```
-echo 'monitor = , preferred, auto, 1' > ~/.config/hypr/conf.d/monitors.conf
+cat > ~/.config/hypr/conf.d/monitors.conf <<'EOF'
+# >>> hyprglass managed display >>>
+monitor = , preferred, auto, 1
+# <<< hyprglass managed display <<<
+EOF
 ```
+
+Then reload from a TTY or restart the session.
 
 ## Portals or screen sharing broken
 

@@ -1,7 +1,7 @@
 * {
   border: none;
   border-radius: 0;
-  font-family: "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "Symbols Nerd Font", monospace;
+  font-family: "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font Mono", "Symbols Nerd Font Mono", "Symbols Nerd Font", "Noto Sans", "DejaVu Sans", sans-serif;
   font-size: 12px;
   min-height: 0;
 }
@@ -55,6 +55,22 @@ window#waybar {
 }
 
 #clock { color: #d9dddf; }
+#network,
+#custom-bluetooth,
+#pulseaudio,
+#backlight,
+#battery,
+#custom-settings,
+#custom-power {
+  font-family: "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font", "Noto Sans", "DejaVu Sans", sans-serif;
+}
+
+#custom-bluetooth,
+#custom-settings,
+#custom-power {
+  font-size: 13px;
+}
+
 #custom-settings { color: #9aa0aa; }
 #custom-power { color: #ffb4a8; }
 #network.disconnected,

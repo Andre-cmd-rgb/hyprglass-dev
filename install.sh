@@ -12,6 +12,8 @@ SETUP_SCALE=auto
 SETUP_MODEM_APN=
 SETUP_MODEM_PIN=
 SETUP_ENABLE_SERVICES=1
+SETUP_LOGIN_MANAGER=1
+SETUP_AUTOLOGIN=0
 SETUP_CACHY_CHWD=0
 PREFIX="${HYPRGLASS_PREFIX:-${HOME}/.local/bin}"
 
@@ -25,19 +27,27 @@ for a in "$@"; do
     --skip-setup)   SKIP_SETUP=1 ;;
     --rate-mirrors) RATE_MIRRORS=1 ;;
     --auto-hardware) AUTO_HARDWARE=1; SETUP_CACHY_CHWD=1 ;;
+    --login-manager) SETUP_LOGIN_MANAGER=1 ;;
+    --no-login-manager) SETUP_LOGIN_MANAGER=0 ;;
+    --autologin) SETUP_AUTOLOGIN=1; SETUP_LOGIN_MANAGER=1 ;;
     --distro=*)     DISTRO="${a#*=}" ;;
     --help|-h)
       cat <<HELP
 Usage: install.sh [options]
 
   (no flags)       Full install: packages + binary + configs
-  --update         Pull latest changes from git and overwrite all configs.
-                   Skips packages. Implies --yes. Safe to re-run any time.
+  --update         Pull latest changes from git and refresh configs while preserving
+                   existing display/monitor rules. Skips packages. Implies --yes.
   --no-packages    Skip pacman; install binary + configs only
   --configs-only   Skip pacman and binary build; configs only
   --yes            Overwrite existing configs without prompting
   --dry-run        Print what would happen; make no changes
   --skip-setup     Use defaults instead of first-setup questions
+  --login-manager Enable greetd + tuigreet so boot lands in a Hyprland login. Default.
+  --no-login-manager
+                  Do not configure greetd.
+  --autologin     Add a greetd initial_session for passwordless Hyprland startup.
+                  Off by default. Use only on a private machine.
   --distro=auto|arch|cachyos
                   Select package profile. Default auto-detects /etc/os-release.
   --rate-mirrors   On CachyOS, run cachyos-rate-mirrors before package install.
@@ -107,6 +117,25 @@ rank_cachyos_mirrors_if_requested() {
   run sudo cachyos-rate-mirrors
 }
 
+ensure_icon_fonts() {
+  [[ $CONFIGS_ONLY -eq 0 ]] || return 0
+  local missing=()
+  if command -v pacman >/dev/null 2>&1; then
+    pacman -Q ttf-jetbrains-mono-nerd >/dev/null 2>&1 || missing+=(ttf-jetbrains-mono-nerd)
+    pacman -Q ttf-nerd-fonts-symbols-mono >/dev/null 2>&1 || missing+=(ttf-nerd-fonts-symbols-mono)
+    pacman -Q fontconfig >/dev/null 2>&1 || missing+=(fontconfig)
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Installing missing Hyprglass icon/font packages: ${missing[*]}"
+      run sudo pacman -S --needed "${missing[@]}"
+    fi
+  else
+    echo "pacman not found; cannot auto-install icon fonts. Ensure ttf-jetbrains-mono-nerd and ttf-nerd-fonts-symbols-mono are installed."
+  fi
+  if command -v fc-cache >/dev/null 2>&1; then
+    run fc-cache -f
+  fi
+}
+
 ask(){
   [[ $YES -eq 1 || $DRY -eq 1 ]] && return 0
   read -r -p "$1 [y/N] " ans
@@ -137,7 +166,7 @@ prompt_yes_no_default() {
 run_first_setup() {
   [[ $UPDATE -eq 0 ]] || return 0
   if [[ $DRY -eq 1 ]]; then
-    echo "+ first setup would ask theme, accent, keyboard layout, display scale, services, CachyOS hardware, and modem defaults"
+    echo "+ first setup would ask theme, accent, keyboard layout, display scale, login manager, services, CachyOS hardware, and modem defaults"
     return 0
   fi
   if [[ $YES -eq 1 || $SKIP_SETUP -eq 1 ]]; then
@@ -155,6 +184,10 @@ MSG
   prompt_default SETUP_LAYOUT "Keyboard layout: us, it, es, gb, de" "us"
   prompt_default SETUP_VARIANT "Keyboard variant, empty is fine" ""
   prompt_default SETUP_SCALE "Display scale: auto, 1.25, 1.5, 1.75, 2" "auto"
+  prompt_yes_no_default SETUP_LOGIN_MANAGER "Enable Hyprglass login manager at boot? greetd starts Hyprland after login" "Y"
+  if [[ $SETUP_LOGIN_MANAGER -eq 1 ]]; then
+    prompt_yes_no_default SETUP_AUTOLOGIN "Passwordless autologin straight into Hyprland? Use only on a private machine" "N"
+  fi
   prompt_yes_no_default SETUP_ENABLE_SERVICES "Enable hardware/session services now? NetworkManager, Bluetooth, ModemManager, power profiles" "Y"
   read -r -p "LTE/5G modem APN for autoconnect, empty skips modem setup: " SETUP_MODEM_APN
   if [[ -n "$SETUP_MODEM_APN" ]]; then
@@ -182,17 +215,16 @@ write_preferences_json() {
     return 0
   fi
   mkdir -p "$(dirname "$dst")"
-  cat >"$dst" <<EOF
-{
-  "themeMode": $(json_escape "$SETUP_THEME"),
-  "accent": $(json_escape "$SETUP_ACCENT"),
-  "keyboardLayout": $(json_escape "$SETUP_LAYOUT"),
-  "keyboardVariant": $(json_escape "$SETUP_VARIANT"),
-  "monitorScale": $(json_escape "$SETUP_SCALE"),
-  "modemApn": $(json_escape "$SETUP_MODEM_APN"),
-  "modemPinSet": false
-}
-EOF
+  python3 - "$dst" "$SETUP_THEME" "$SETUP_ACCENT" "$SETUP_LAYOUT" "$SETUP_VARIANT" "$SETUP_SCALE" "$SETUP_MODEM_APN" <<'PYPREFS'
+import json
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+keys = ["themeMode", "accent", "keyboardLayout", "keyboardVariant", "monitorScale", "modemApn"]
+data = dict(zip(keys, sys.argv[2:]))
+data["modemPinSet"] = False
+path.write_text(json.dumps(data, indent=2) + "\n")
+PYPREFS
 }
 
 ensure_executable_bits() {
@@ -334,6 +366,81 @@ write_source_root() {
   fi
   mkdir -p "$(dirname "$dst")"
   printf '%s\n' "$ROOT" >"$dst"
+}
+
+enabled_foreign_display_manager() {
+  command -v systemctl >/dev/null 2>&1 || return 1
+  local svc
+  for svc in sddm.service gdm.service lightdm.service ly.service lxdm.service; do
+    if systemctl is-enabled --quiet "$svc" 2>/dev/null; then
+      printf '%s\n' "$svc"
+      return 0
+    fi
+  done
+  return 1
+}
+
+configure_login_manager() {
+  [[ $UPDATE -eq 0 ]] || return 0
+  [[ $CONFIGS_ONLY -eq 0 ]] || return 0
+  [[ $SETUP_LOGIN_MANAGER -eq 1 ]] || return 0
+  [[ "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 ]] || return 0
+
+  local user_name existing tmp
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ configure greetd + tuigreet so boot opens a Hyprland login session"
+    [[ $SETUP_AUTOLOGIN -eq 1 ]] && echo "+ add greetd initial_session autologin for the installing user"
+    return 0
+  fi
+
+  user_name=$(id -un 2>/dev/null || printf '%s' "${USER:-}")
+  if [[ -z "$user_name" || "$user_name" == root ]]; then
+    echo "Skipping greetd setup: could not determine a non-root target user."
+    return 0
+  fi
+
+  if ! command -v systemctl >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+    echo "Skipping greetd setup: systemctl or sudo unavailable."
+    return 0
+  fi
+
+  existing=$(enabled_foreign_display_manager || true)
+  if [[ -n "$existing" && "${HYPRGLASS_FORCE_GREETD:-0}" != 1 ]]; then
+    echo "Skipping greetd setup: $existing is already enabled. Set HYPRGLASS_FORCE_GREETD=1 to replace it."
+    return 0
+  fi
+
+  if ! command -v tuigreet >/dev/null 2>&1 && ! [[ -x /usr/bin/tuigreet ]]; then
+    echo "Skipping greetd setup: tuigreet is not installed. Re-run without --no-packages or install greetd-tuigreet."
+    return 0
+  fi
+
+  tmp=$(mktemp "${TMPDIR:-/tmp}/hyprglass-greetd.XXXXXX")
+  {
+    echo '# Hyprglass greetd config.'
+    echo '# Managed by install.sh. Backups are kept beside /etc/greetd/config.toml.'
+    echo '[terminal]'
+    echo 'vt = 1'
+    echo
+    if [[ $SETUP_AUTOLOGIN -eq 1 ]]; then
+      echo '[initial_session]'
+      echo 'command = "Hyprland"'
+      printf 'user = "%s"\n' "$user_name"
+      echo
+    fi
+    echo '[default_session]'
+    echo 'command = "tuigreet --cmd Hyprland"'
+    echo 'user = "greeter"'
+  } >"$tmp"
+
+  sudo install -d -m 0755 /etc/greetd
+  if [[ -f /etc/greetd/config.toml ]]; then
+    sudo cp -a /etc/greetd/config.toml "/etc/greetd/config.toml.hyprglass-backup-$(date +%Y%m%d-%H%M%S)"
+  fi
+  sudo install -m 0644 "$tmp" /etc/greetd/config.toml
+  rm -f "$tmp"
+  sudo systemctl enable greetd.service
+  echo "greetd enabled. On next boot, tuigreet will start Hyprland after login."
 }
 
 configure_desktop_theme() {
@@ -519,6 +626,12 @@ if [[ $NO_PACKAGES -eq 0 ]]; then
   fi
 fi
 
+# Icon fonts are required by Waybar. Updates install these even though normal package install is skipped,
+# because old Hyprglass installs lacked the dedicated Symbols Nerd Font fallback.
+if [[ $CONFIGS_ONLY -eq 0 && ( $NO_PACKAGES -eq 0 || $UPDATE -eq 1 ) && "${HYPRGLASS_SKIP_ICON_FONT_INSTALL:-0}" != 1 ]]; then
+  ensure_icon_fonts
+fi
+
 # Build binary
 run mkdir -p "$PREFIX"
 if [[ $CONFIGS_ONLY -eq 0 ]]; then
@@ -530,6 +643,9 @@ fi
 # Back up + copy configs
 backup="$HOME/.config/hyprglass-backups/$(date +%Y%m%d-%H%M%S)"
 run mkdir -p "$backup"
+PRESERVED_DISPLAY_CONFIG=0
+PRESERVED_DISPLAY_TMP=""
+DISPLAY_CONFIG="$HOME/.config/hypr/conf.d/monitors.conf"
 
 copy_cfg() {
   local src="$1" dst="$2"
@@ -556,7 +672,34 @@ copy_cfg() {
   fi
 }
 
+preserve_display_config_before_copy() {
+  [[ -f "$DISPLAY_CONFIG" ]] || return 0
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ preserve existing display config at $DISPLAY_CONFIG"
+    PRESERVED_DISPLAY_CONFIG=1
+    return 0
+  fi
+  PRESERVED_DISPLAY_TMP=$(mktemp "${TMPDIR:-/tmp}/hyprglass-monitors.XXXXXX")
+  cp -a "$DISPLAY_CONFIG" "$PRESERVED_DISPLAY_TMP"
+  PRESERVED_DISPLAY_CONFIG=1
+}
+
+restore_display_config_after_copy() {
+  [[ $PRESERVED_DISPLAY_CONFIG -eq 1 ]] || return 0
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ restore preserved display config after copying Hyprglass configs"
+    return 0
+  fi
+  [[ -n "$PRESERVED_DISPLAY_TMP" && -f "$PRESERVED_DISPLAY_TMP" ]] || return 0
+  mkdir -p "$(dirname "$DISPLAY_CONFIG")"
+  cp -a "$PRESERVED_DISPLAY_TMP" "$DISPLAY_CONFIG"
+  rm -f "$PRESERVED_DISPLAY_TMP"
+  echo "Preserved existing display config: $DISPLAY_CONFIG"
+}
+
+preserve_display_config_before_copy
 copy_cfg "$ROOT/config/hypr"     "$HOME/.config/hypr"
+restore_display_config_after_copy
 copy_cfg "$ROOT/config/kitty"    "$HOME/.config/kitty"
 copy_cfg "$ROOT/config/waybar"   "$HOME/.config/waybar"
 copy_cfg "$ROOT/config/hyprlock/hyprlock.conf" "$HOME/.config/hypr/hyprlock.conf"
@@ -574,7 +717,11 @@ write_installed_hyprpaper_config
 write_installed_hyprlock_config
 write_preferences_json
 if [[ $DRY -eq 0 && $CONFIGS_ONLY -eq 0 && -x "$PREFIX/hyprglass" ]]; then
-  "$PREFIX/hyprglass" settings apply --no-reload >/dev/null || true
+  apply_args=(settings apply --no-reload)
+  if [[ $UPDATE -eq 0 && $PRESERVED_DISPLAY_CONFIG -eq 0 ]]; then
+    apply_args+=(--with-display)
+  fi
+  "$PREFIX/hyprglass" "${apply_args[@]}" >/dev/null || true
 fi
 write_source_root
 configure_path
@@ -599,6 +746,8 @@ if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${
     enable_service_if_present "$svc"
   done
 fi
+
+configure_login_manager
 
 if [[ $DRY -eq 0 && $UPDATE -eq 0 && -n "$SETUP_MODEM_APN" && -x "$ROOT/scripts/hyprglass-modem-autounlock-install.sh" ]]; then
   args=("$ROOT/scripts/hyprglass-modem-autounlock-install.sh" --apn "$SETUP_MODEM_APN")
@@ -634,7 +783,7 @@ elif [[ $UPDATE -eq 1 ]]; then
   cat <<MSG
 
 Hyprglass update complete.
-All configs refreshed. Previous configs backed up to:
+Configs refreshed. Existing display/monitor rules were preserved. Previous configs backed up to:
   $backup
 
 If Hyprland was running, config was reloaded automatically.
@@ -645,7 +794,7 @@ else
   cat <<MSG
 
 Hyprglass install complete.
-Start Hyprland from your login/session manager or TTY.
+Boot login: greetd/tuigreet is configured when enabled in first setup.
 Run: hyprglass doctor
 Open Hyprglass Settings with Super+I or Super+comma inside Hyprland.
 Backups: $backup

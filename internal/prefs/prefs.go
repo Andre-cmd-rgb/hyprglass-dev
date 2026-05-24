@@ -32,6 +32,17 @@ type Palette struct {
 	Danger  string
 }
 
+type ApplyOptions struct {
+	Visuals bool
+	Input   bool
+	Display bool
+}
+
+const (
+	displayStartMarker = "# >>> hyprglass managed display >>>"
+	displayEndMarker   = "# <<< hyprglass managed display <<<"
+)
+
 func Default() Preferences {
 	return Preferences{
 		ThemeMode:      "dark",
@@ -139,32 +150,228 @@ func PaletteFor(p Preferences) Palette {
 	}
 }
 
+// Apply is intentionally display-safe. It refreshes theme, Waybar, launcher,
+// GTK, Mako, and input settings, but it does not touch monitor rules. Display
+// changes are applied only by ApplyDisplay or ApplyAll so a quick appearance
+// change cannot destroy a custom laptop/external-monitor layout.
 func Apply(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Visuals: true, Input: true})
+}
+
+func ApplyVisuals(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Visuals: true})
+}
+
+func ApplyInput(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Input: true})
+}
+
+func ApplyDisplay(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Display: true})
+}
+
+func ApplyDisplayAndInput(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Display: true, Input: true})
+}
+
+func ApplyAll(p Preferences) error {
+	return ApplyWithOptions(p, ApplyOptions{Visuals: true, Input: true, Display: true})
+}
+
+func ApplyWithOptions(p Preferences, opts ApplyOptions) error {
 	p.Normalize()
 	pal := PaletteFor(p)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	writes := map[string]string{
-		filepath.Join(home, ".config", "hypr", "conf.d", "theme.conf"):    hyprTheme(pal),
-		filepath.Join(home, ".config", "hypr", "conf.d", "input.conf"):    inputConfig(p),
-		filepath.Join(home, ".config", "hypr", "conf.d", "monitors.conf"): monitorConfig(p),
-		filepath.Join(home, ".config", "waybar", "style.css"):             waybarCSS(pal, p.ThemeMode),
-		filepath.Join(home, ".config", "mako", "config"):                  makoConfig(pal),
-		filepath.Join(home, ".config", "fuzzel", "fuzzel.ini"):            fuzzelConfig(pal),
-		filepath.Join(home, ".config", "gtk-3.0", "settings.ini"):         gtkSettings(p),
-		filepath.Join(home, ".config", "gtk-4.0", "settings.ini"):         gtkSettings(p),
+	writes := map[string]string{}
+	if opts.Visuals {
+		writes[filepath.Join(home, ".config", "hypr", "conf.d", "theme.conf")] = hyprTheme(pal)
+		writes[filepath.Join(home, ".config", "waybar", "style.css")] = waybarCSS(pal, p.ThemeMode)
+		writes[filepath.Join(home, ".config", "mako", "config")] = makoConfig(pal)
+		writes[filepath.Join(home, ".config", "fuzzel", "fuzzel.ini")] = fuzzelConfig(pal)
+		writes[filepath.Join(home, ".config", "gtk-3.0", "settings.ini")] = gtkSettings(p)
+		writes[filepath.Join(home, ".config", "gtk-4.0", "settings.ini")] = gtkSettings(p)
+	}
+	if opts.Input {
+		writes[filepath.Join(home, ".config", "hypr", "conf.d", "input.conf")] = inputConfig(p)
 	}
 	for path, data := range writes {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := writeFile(path, data); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+	}
+	if opts.Display {
+		path := filepath.Join(home, ".config", "hypr", "conf.d", "monitors.conf")
+		if err := writeManagedDisplayScale(path, p.MonitorScale); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func writeFile(path, data string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(data), 0o644)
+}
+
+func writeManagedDisplayScale(path, scale string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	scale = strings.TrimSpace(scale)
+	if scale == "" || !validScale(scale) {
+		scale = "auto"
+	}
+	defaultBlock := monitorConfigWithScale(scale)
+	oldBytes, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return os.WriteFile(path, []byte(displayFile(defaultBlock)), 0o644)
+	}
+	if err != nil {
+		return err
+	}
+	old := string(oldBytes)
+	start := strings.Index(old, displayStartMarker)
+	end := strings.Index(old, displayEndMarker)
+	if start >= 0 && end >= 0 && end > start {
+		end += len(displayEndMarker)
+		block := old[start:end]
+		updatedBlock := updateDisplayBlockScale(block, scale)
+		updated := strings.TrimRight(old[:start], " \t\r\n") + "\n" + strings.TrimRight(updatedBlock, "\n") + "\n" + strings.TrimLeft(old[end:], " \t\r\n")
+		return os.WriteFile(path, []byte(ensureTrailingNewline(updated)), 0o644)
+	}
+	if isLegacyHyprglassDisplay(old) || strings.TrimSpace(old) == "" {
+		return os.WriteFile(path, []byte(displayFile(defaultBlock)), 0o644)
+	}
+	if hasActiveMonitorRule(old) {
+		return fmt.Errorf("refusing to overwrite manual display config at %s; add a %q block around the line you want Hyprglass to scale, or edit the file manually", path, displayStartMarker)
+	}
+	updated := strings.TrimRight(old, " \t\r\n") + "\n\n" + strings.TrimRight(defaultBlock, "\n") + "\n"
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func updateDisplayBlockScale(block, scale string) string {
+	lines := strings.Split(block, "\n")
+	changed := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") || !strings.HasPrefix(trimmed, "monitor") {
+			continue
+		}
+		lhs, rhs, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(lhs) != "monitor" {
+			continue
+		}
+		comment := ""
+		if hash := strings.Index(rhs, "#"); hash >= 0 {
+			comment = rhs[hash:]
+			rhs = rhs[:hash]
+		}
+		parts := strings.Split(rhs, ",")
+		for len(parts) < 4 {
+			parts = append(parts, "")
+		}
+		parts[3] = replaceFieldKeepingIndent(parts[3], scale)
+		lines[i] = lhs + "=" + strings.Join(parts, ",") + restoreInlineComment(comment)
+		changed = true
+	}
+	if !changed {
+		insert := strings.Split(monitorConfigWithScale(scale), "\n")
+		// Keep the existing markers and place the default monitor line between them.
+		var out []string
+		inserted := false
+		for _, line := range lines {
+			out = append(out, line)
+			if !inserted && strings.TrimSpace(line) == displayStartMarker {
+				for _, il := range insert {
+					if strings.TrimSpace(il) == "" || strings.TrimSpace(il) == displayStartMarker || strings.TrimSpace(il) == displayEndMarker || strings.HasPrefix(strings.TrimSpace(il), "#") {
+						continue
+					}
+					out = append(out, il)
+				}
+				inserted = true
+			}
+		}
+		lines = out
+	}
+	return strings.Join(lines, "\n")
+}
+
+func replaceFieldKeepingIndent(field, value string) string {
+	leading := field[:len(field)-len(strings.TrimLeft(field, " \t"))]
+	trailing := field[len(strings.TrimRight(field, " \t")):]
+	if leading == "" {
+		leading = " "
+	}
+	return leading + value + trailing
+}
+
+func restoreInlineComment(comment string) string {
+	if comment == "" {
+		return ""
+	}
+	if strings.HasPrefix(comment, " ") || strings.HasPrefix(comment, "\t") {
+		return comment
+	}
+	return " " + comment
+}
+
+func displayFile(block string) string {
+	return `# Hyprglass display configuration.
+# This file is safe for custom laptop/external-monitor layouts.
+# Hyprglass Settings only rewrites the marked block below.
+# Put manual monitor rules outside the block, or remove the block and manage display yourself.
+
+` + strings.TrimRight(block, "\n") + "\n"
+}
+
+func isLegacyHyprglassDisplay(data string) bool {
+	if !strings.Contains(data, "Hyprglass generated display rule") && !strings.Contains(data, "Universal laptop-safe rule") {
+		return false
+	}
+	active := activeMonitorRules(data)
+	if len(active) == 0 {
+		return true
+	}
+	for _, line := range active {
+		normalized := strings.ReplaceAll(line, " ", "")
+		if !strings.HasPrefix(normalized, "monitor=,preferred,auto,") {
+			return false
+		}
+	}
+	return true
+}
+
+func hasActiveMonitorRule(data string) bool {
+	return len(activeMonitorRules(data)) > 0
+}
+
+func activeMonitorRules(data string) []string {
+	var rules []string
+	for _, line := range strings.Split(data, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "monitor") {
+			lhs := strings.TrimSpace(strings.SplitN(trimmed, "=", 2)[0])
+			if lhs == "monitor" || strings.HasPrefix(lhs, "monitorv2") {
+				rules = append(rules, trimmed)
+			}
+		}
+	}
+	return rules
+}
+
+func ensureTrailingNewline(s string) string {
+	if strings.HasSuffix(s, "\n") {
+		return s
+	}
+	return s + "\n"
 }
 
 func hyprTheme(p Palette) string {
@@ -209,17 +416,26 @@ func monitorConfig(p Preferences) string {
 	if scale == "" {
 		scale = "auto"
 	}
-	return fmt.Sprintf(`# Hyprglass generated display rule. Edit through hyprglass settings.
-# Uses preferred panel resolution and automatic monitor placement.
+	return monitorConfigWithScale(scale)
+}
+
+func monitorConfigWithScale(scale string) string {
+	if scale == "" {
+		scale = "auto"
+	}
+	return fmt.Sprintf(`%s
+# Preferred panel resolution, automatic placement, configurable scale.
+# Settings changes only the scale field on monitor lines inside this block.
 monitor = , preferred, auto, %s
-`, scale)
+%s
+`, displayStartMarker, scale, displayEndMarker)
 }
 
 func waybarCSS(p Palette, mode string) string {
 	return fmt.Sprintf(`* {
   border: none;
   border-radius: 0;
-  font-family: "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "Symbols Nerd Font", monospace;
+  font-family: "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font Mono", "Symbols Nerd Font Mono", "Symbols Nerd Font", "Noto Sans", "DejaVu Sans", sans-serif;
   font-size: 12px;
   min-height: 0;
 }
@@ -273,6 +489,22 @@ window#waybar {
 }
 
 #clock { color: %s; }
+#network,
+#custom-bluetooth,
+#pulseaudio,
+#backlight,
+#battery,
+#custom-settings,
+#custom-power {
+  font-family: "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font", "Noto Sans", "DejaVu Sans", sans-serif;
+}
+
+#custom-bluetooth,
+#custom-settings,
+#custom-power {
+  font-size: 13px;
+}
+
 #custom-settings { color: %s; }
 #custom-power { color: %s; }
 #network.disconnected,
