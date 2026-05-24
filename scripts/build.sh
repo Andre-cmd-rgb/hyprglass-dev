@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p build
-go build -o build/hyprglass ./cmd/hyprglass
+go build -buildvcs=false -o build/hyprglass ./cmd/hyprglass

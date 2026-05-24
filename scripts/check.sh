@@ -14,7 +14,7 @@ if [[ -n $(gofmt -l .) ]]; then gofmt -w .; fail "gofmt changed files; rerun che
 run go test ./... || fail "go test"
 run go vet ./... || fail "go vet"
 mkdir -p build
-run go build -o build/hyprglass ./cmd/hyprglass || fail "go build"
+run go build -buildvcs=false -o build/hyprglass ./cmd/hyprglass || fail "go build"
 run build/hyprglass --help >/dev/null || fail "hyprglass help"
 json=$(build/hyprglass doctor --json) || fail "doctor json command"
 if command -v jq >/dev/null 2>&1; then echo "$json" | jq . >/dev/null || fail "invalid doctor JSON"; else warn "jq missing; JSON validation by jq skipped"; fi

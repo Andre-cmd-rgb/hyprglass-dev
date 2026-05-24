@@ -58,7 +58,7 @@ func main() {
 	case "wallpaper":
 		if len(args) > 1 && args[1] == "generate" {
 			script := filepath.Join(repoRoot(), "scripts", "generate-wallpaper.py")
-			out, err := r.Run("python", script)
+			out, err := r.Run("python3", script)
 			if err != nil {
 				fmt.Println("wallpaper generation failed:", err)
 				fmt.Print(out)

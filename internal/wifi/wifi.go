@@ -20,7 +20,7 @@ func ParseList(out string) []Network {
 		if l == "" || strings.HasPrefix(l, "SSID") {
 			continue
 		}
-		parts := strings.Split(l, ":")
+		parts := strings.SplitN(l, "|", 3)
 		if len(parts) < 2 {
 			continue
 		}
@@ -43,7 +43,7 @@ func RunTUI(r command.Runner) {
 	fmt.Println("radio:", strings.TrimSpace(radio))
 	active, _ := r.Run("nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active")
 	fmt.Println("active connections:\n" + strings.TrimSpace(active))
-	out, err := r.Run("nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list")
+	out, err := r.Run("nmcli", "-t", "--escape", "no", "--separator", "|", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list")
 	if err != nil {
 		fmt.Println("could not list Wi-Fi networks:", err)
 		return

@@ -15,7 +15,7 @@ if [[ $NO_PACKAGES -eq 0 ]]; then
   fi
 fi
 run mkdir -p "$PREFIX"
-if [[ $CONFIGS_ONLY -eq 0 ]]; then run go build -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"; fi
+if [[ $CONFIGS_ONLY -eq 0 ]]; then run go build -buildvcs=false -o "$PREFIX/hyprglass" "$ROOT/cmd/hyprglass"; fi
 backup="$HOME/.config/hyprglass-backups/$(date +%Y%m%d-%H%M%S)"
 run mkdir -p "$backup"
 copy_cfg(){ src="$1"; dst="$2"; if [[ -e "$dst" ]]; then run cp -a "$dst" "$backup/$(basename "$dst")"; fi; if [[ -e "$dst" && $YES -ne 1 && $DRY -ne 1 ]]; then ask "Overwrite $dst?" || return 0; fi; run mkdir -p "$(dirname "$dst")"; run cp -a "$src" "$dst"; }
