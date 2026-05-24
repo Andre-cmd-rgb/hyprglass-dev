@@ -116,6 +116,7 @@ func update() {
 		fmt.Println("Hyprglass could not find install.sh in its source checkout, so it cannot auto-update. Run: sudo pacman -Syu, then rerun hyprglass doctor")
 		return
 	}
+	ensureExecutableBits(root)
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		fmt.Println("bash is required to run the Hyprglass updater:", err)
@@ -147,6 +148,7 @@ func findSourceRoot() string {
 			candidates = append(candidates, p)
 		}
 	}
+	add(os.Getenv("HYPRGLASS_SOURCE_ROOT"))
 	add(sourceRoot)
 	if home, err := os.UserHomeDir(); err == nil {
 		if b, err := os.ReadFile(filepath.Join(home, ".config", "hyprglass", "source-root")); err == nil {
@@ -184,4 +186,15 @@ func isSourceRoot(dir string) bool {
 		}
 	}
 	return true
+}
+
+func ensureExecutableBits(root string) {
+	_ = os.Chmod(filepath.Join(root, "install.sh"), 0o755)
+	_ = os.Chmod(filepath.Join(root, "uninstall.sh"), 0o755)
+	for _, pattern := range []string{"scripts/*.sh", "scripts/*.py"} {
+		matches, _ := filepath.Glob(filepath.Join(root, pattern))
+		for _, m := range matches {
+			_ = os.Chmod(m, 0o755)
+		}
+	}
 }

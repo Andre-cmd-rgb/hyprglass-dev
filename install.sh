@@ -49,6 +49,14 @@ ask(){
   [[ $ans == y || $ans == Y ]]
 }
 
+ensure_executable_bits() {
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ chmod +x $ROOT/install.sh $ROOT/uninstall.sh $ROOT/scripts/*"
+    return 0
+  fi
+  chmod +x "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT"/scripts/* 2>/dev/null || true
+}
+
 build_version() {
   local v=""
   if [[ -n "${HYPRGLASS_VERSION:-}" ]]; then
@@ -180,10 +188,103 @@ write_source_root() {
   printf '%s\n' "$ROOT" >"$dst"
 }
 
+ensure_current_shell_command() {
+  local target="$PREFIX/hyprglass"
+  local link="/usr/local/bin/hyprglass"
+
+  [[ $CONFIGS_ONLY -eq 0 ]] || return 0
+  [[ -x "$target" || $DRY -eq 1 ]] || return 0
+
+  if [[ ":$PATH:" == *":$PREFIX:"* ]]; then
+    return 0
+  fi
+
+  if [[ ":$PATH:" != *":/usr/local/bin:"* ]]; then
+    cat <<MSG
+
+$PREFIX is not on this terminal's current PATH, and /usr/local/bin is not either.
+Future shells are configured. For this terminal run:
+  export PATH="$PREFIX:\$PATH"
+MSG
+    return 0
+  fi
+
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ link $link -> $target so hyprglass works in the current terminal"
+    return 0
+  fi
+
+  if [[ -w /usr/local/bin ]]; then
+    ln -sf "$target" "$link"
+    echo "Linked $link -> $target"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ln -sf "$target" "$link"
+    echo "Linked $link -> $target"
+  else
+    cat <<MSG
+
+Could not create $link because sudo is unavailable.
+Future shells are configured. For this terminal run:
+  export PATH="$PREFIX:\$PATH"
+MSG
+  fi
+}
+
+restart_session_components() {
+  [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
+  [[ $DRY -eq 0 ]] || return 0
+
+  start_bg() {
+    local name="$1"
+    shift
+    command -v "$1" >/dev/null 2>&1 || return 0
+    if command -v setsid >/dev/null 2>&1; then
+      setsid -f "$@" >/dev/null 2>&1 || true
+    else
+      nohup "$@" >/dev/null 2>&1 &
+    fi
+    echo "Started $name."
+  }
+
+  echo "Restarting Hyprglass session components..."
+  pkill -x waybar 2>/dev/null || true
+  pkill -x hyprpaper 2>/dev/null || true
+  pkill -x mako 2>/dev/null || true
+  pkill -x hypridle 2>/dev/null || true
+  start_bg hyprpaper hyprpaper
+  start_bg waybar waybar
+  start_bg mako mako
+  start_bg hypridle hypridle
+}
+
+verify_installed_configs() {
+  [[ $DRY -eq 0 ]] || return 0
+  [[ -f "$HOME/.config/hypr/hyprland.conf" ]] || { echo "Install failed: missing ~/.config/hypr/hyprland.conf"; exit 1; }
+  [[ -f "$HOME/.config/hypr/hyprpaper.conf" ]] || { echo "Install failed: missing ~/.config/hypr/hyprpaper.conf"; exit 1; }
+  [[ -f "$HOME/.config/waybar/config.jsonc" ]] || { echo "Install failed: missing ~/.config/waybar/config.jsonc"; exit 1; }
+  [[ -f "$HOME/.config/waybar/style.css" ]] || { echo "Install failed: missing ~/.config/waybar/style.css"; exit 1; }
+  [[ -f "$HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png" ]] || { echo "Install failed: missing Hyprglass wallpaper asset"; exit 1; }
+  grep -Fq "Hyprglass main Hyprland config" "$HOME/.config/hypr/hyprland.conf" || {
+    echo "Install failed: ~/.config/hypr/hyprland.conf was not replaced with Hyprglass config"
+    exit 1
+  }
+}
+
+ensure_executable_bits
+
 # --update: pull latest from git
 if [[ $UPDATE -eq 1 ]]; then
   echo "==> Hyprglass update"
   if [[ -d "$ROOT/.git" ]]; then
+    if [[ $DRY -eq 0 ]]; then
+      if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet || [[ -n $(git -C "$ROOT" ls-files --others --exclude-standard) ]]; then
+        stash_name="hyprglass-auto-update-$(date +%Y%m%d-%H%M%S)"
+        echo "Local repo changes detected - saving them to git stash: $stash_name"
+        git -C "$ROOT" stash push -u -m "$stash_name"
+      fi
+    else
+      echo "+ check for local changes and stash before pull if needed"
+    fi
     echo "Git repo detected - pulling latest changes..."
     run git -C "$ROOT" pull --ff-only
     if [[ $DRY -eq 0 && "${HYPRGLASS_UPDATE_REEXECED:-0}" != 1 ]]; then
@@ -232,11 +333,19 @@ copy_cfg() {
   if [[ -e "$dst" && $YES -ne 1 && $DRY -ne 1 ]]; then
     ask "Overwrite $dst?" || return 0
   fi
-  if [[ -e "$dst" ]]; then
-    run rm -rf "$dst"
+  if [[ -d "$src" ]]; then
+    if [[ -e "$dst" && ! -d "$dst" ]]; then
+      run rm -f "$dst"
+    fi
+    run mkdir -p "$dst"
+    run cp -a "$src"/. "$dst"/
+  else
+    if [[ -d "$dst" ]]; then
+      run rm -rf "$dst"
+    fi
+    run mkdir -p "$(dirname "$dst")"
+    run cp -af "$src" "$dst"
   fi
-  run mkdir -p "$(dirname "$dst")"
-  run cp -a "$src" "$dst"
 }
 
 copy_cfg "$ROOT/config/hypr"     "$HOME/.config/hypr"
@@ -254,11 +363,13 @@ run cp -a "$ROOT/assets/wallpapers" "$HOME/.config/hypr/assets/"
 run cp -a "$ROOT/docs/shortcuts.md" "$HOME/.config/hyprglass/docs/shortcuts.md"
 write_source_root
 configure_path
+ensure_current_shell_command
+verify_installed_configs
 
-if [[ $DRY -eq 0 ]]; then chmod +x "$ROOT"/scripts/*.sh || true; fi
+ensure_executable_bits
 
 # Systemd services
-if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 ]]; then
+if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 ]]; then
   if ask "Enable NetworkManager, bluetooth, and ModemManager services now?"; then
     sudo systemctl enable --now \
       NetworkManager.service bluetooth.service ModemManager.service
@@ -270,6 +381,7 @@ if [[ $DRY -eq 0 && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
   echo "Hyprland session detected — reloading config..."
   run hyprctl reload
   echo "Config reloaded."
+  restart_session_components
 fi
 
 # Summary

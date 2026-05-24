@@ -44,6 +44,10 @@ or from the repo:
 ./install.sh --update
 ```
 
+The updater stashes local repo changes before pulling, re-runs the installer after
+pulling, refreshes configs, and restarts Hyprland session components when run
+inside Hyprland. You do not need to run `git commit` for normal updates.
+
 Run checks:
 
 ```sh
