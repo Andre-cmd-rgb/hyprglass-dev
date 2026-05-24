@@ -39,5 +39,5 @@ func RunTUI(r command.Runner) {
 	for _, m := range ms {
 		fmt.Printf("%s  %dx%d @ %.2fHz scale %.2f\n", m.Name, m.Width, m.Height, m.RefreshRate, m.Scale)
 	}
-	fmt.Println("V0 shows monitor state only. Apply changes manually in conf.d/monitors.conf.")
+	fmt.Println("Monitor state shown. Use Hyprglass Settings to write the default scaling rule.")
 }

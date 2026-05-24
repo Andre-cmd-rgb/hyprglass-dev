@@ -1,8 +1,8 @@
-# Hyprglass
+# Hyprglass V1
 
 Hyprglass is a fast, glassy Wayland desktop built on Hyprland for focused work.
 
-It is not a distro, not an ISO, not a GNOME/KDE clone, not a profile-switching rice dump, and not an Electron settings app. V0.5 turns a clean Arch install into a polished laptop-oriented Hyprland workstation with Kitty, Waybar, fuzzel, hyprlock, hypridle, mako, and one central terminal-native Settings app.
+It is not a distro, not an ISO, not a GNOME/KDE clone, not a profile-switching rice dump, and not an Electron settings app. V1 turns a clean Arch install into a polished laptop-oriented Hyprland workstation with Kitty, Waybar, fuzzel, hyprlock, hypridle, mako, and one central terminal-native Settings app.
 
 ## Install
 
@@ -68,6 +68,7 @@ hyprglass settings
 hyprglass settings apply
 hyprglass doctor
 hyprglass doctor --json
+hyprglass repair
 hyprglass wifi
 hyprglass bluetooth
 hyprglass lte
@@ -100,7 +101,11 @@ If the wallpaper does not load, run:
 hyprglass settings
 ```
 
-Then choose **Wallpaper repair**. It copies the bundled wallpaper and rewrites `~/.config/hypr/hyprpaper.conf` with an absolute path.
+Then choose **Wallpaper repair**. It copies the bundled wallpaper and rewrites `~/.config/hypr/hyprpaper.conf` using the current `wallpaper { ... }` block syntax with an absolute path. From a terminal you can also run:
+
+```sh
+hyprglass repair
+```
 
 ## Required packages/services
 

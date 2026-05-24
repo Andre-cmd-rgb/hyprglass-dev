@@ -19,7 +19,7 @@ fi
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/hyprglass-check.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
-version=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 0.1.0)
+version=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 1.0.0)
 
 run bash -n install.sh uninstall.sh scripts/*.sh || fail "shell syntax"
 if command -v shellcheck >/dev/null 2>&1; then shellcheck install.sh uninstall.sh scripts/*.sh || fail "shellcheck"; else warn "shellcheck missing"; fi
@@ -38,8 +38,11 @@ if grep -RniE '^[[:space:]]*windowrule[[:space:]]*=[[:space:]]*(float|tile|fulls
 if grep -RniE '^[[:space:]]*layerrule[[:space:]]*=[[:space:]]*(blur|blur_popups|no_anim|dim_around|no_screen_share)([[:space:]]*,|[[:space:]]*$)|^[[:space:]]*layerrule[[:space:]]*=.*,([[:space:]]*)(blur|blur_popups|no_anim|dim_around|no_screen_share)([[:space:]]*,|[[:space:]]*$)' config/hypr; then fail "layerrule boolean effects need explicit values"; else pass "layerrule boolean effects have explicit values"; fi
 for svc in hyprpaper waybar mako hypridle; do grep -Eq "^exec-once[[:space:]]*=[[:space:]]*$svc([[:space:]]|\$)" config/hypr/conf.d/autostart.conf || fail "missing autostart for $svc"; done
 grep -Fq "hyprglass-dusk.png" config/hypr/hyprpaper.conf || fail "hyprpaper wallpaper path missing"
+grep -Fq "wallpaper {" config/hypr/hyprpaper.conf || fail "hyprpaper config must use current wallpaper block syntax"
+if grep -RniE '^[[:space:]]*(preload[[:space:]]*=|wallpaper[[:space:]]*=)' config/hypr/hyprpaper.conf; then fail "hyprpaper config uses removed legacy syntax"; fi
 [[ -f assets/wallpapers/hyprglass-dusk.png ]] || fail "wallpaper asset missing"
 [[ -f config/waybar/config.jsonc && -f config/waybar/style.css ]] || fail "waybar config/style missing"
+if grep -RniE '#[0-9a-fA-F]{8}([[:space:];]|$)' config/waybar/style.css; then fail "Waybar GTK CSS must not use 8-digit hex colors"; fi
 pass "wallpaper and top bar config chain present"
 install_home="$tmpdir/home"
 mkdir -p "$install_home/.config/hypr"
@@ -48,6 +51,8 @@ env HOME="$install_home" HYPRGLASS_SKIP_SERVICES=1 HYPRGLASS_ALLOW_ROOT=1 "$ROOT
 grep -Fq "Hyprglass main Hyprland config" "$install_home/.config/hypr/hyprland.conf" || fail "installer did not replace generated hyprland.conf"
 [[ -f "$install_home/.config/hypr/hyprpaper.conf" ]] || fail "installer did not copy hyprpaper.conf"
 grep -Fq "$install_home/.config/hypr/assets/wallpapers/hyprglass-dusk.png" "$install_home/.config/hypr/hyprpaper.conf" || fail "hyprpaper config does not use absolute wallpaper path"
+grep -Fq "wallpaper {" "$install_home/.config/hypr/hyprpaper.conf" || fail "installed hyprpaper config does not use wallpaper block syntax"
+if grep -RniE '^[[:space:]]*(preload[[:space:]]*=|wallpaper[[:space:]]*=)' "$install_home/.config/hypr/hyprpaper.conf"; then fail "installed hyprpaper config uses removed legacy syntax"; fi
 [[ -f "$install_home/.config/hypr/assets/wallpapers/hyprglass-dusk.png" ]] || fail "installer did not copy wallpaper asset"
 [[ -f "$install_home/.config/waybar/config.jsonc" && -f "$install_home/.config/waybar/style.css" ]] || fail "installer did not copy waybar config/style"
 [[ -f "$install_home/.config/gtk-4.0/settings.ini" ]] || fail "installer did not copy GTK4 settings"

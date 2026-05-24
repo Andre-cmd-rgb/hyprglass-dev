@@ -23,21 +23,25 @@ Start from a TTY with `start-hyprland` (0.53+) or `Hyprland` and read the printe
 
 ## Wallpaper not showing
 
-Hyprpaper needs `~/.config/hypr/hyprpaper.conf`. Confirm `exec-once = hyprpaper` is in
-`autostart.conf` and that the wallpaper path in `hyprpaper.conf` exists.
-Hyprglass writes an absolute wallpaper path during install to avoid tilde
-expansion differences between shells and hyprpaper.
-Re-apply and restart hyprpaper with:
+Hyprpaper needs `~/.config/hypr/hyprpaper.conf`. Current hyprpaper uses a `wallpaper { ... }` block, not the old `wallpaper = , path` line. Confirm `exec-once = hyprpaper` is in `autostart.conf`, that the `path = ...` file exists, and that the config contains a fallback block with an empty `monitor =` field.
+
+Re-apply and restart the wallpaper with:
 
 ```
 hyprglass wallpaper apply
 ```
 
+Or repair the full session surface with:
+
+```
+hyprglass repair
+```
+
 ## Waybar not showing
 
 Run `waybar` in a terminal and check stderr. Common causes: missing font
-(JetBrainsMono Nerd Font), JSON syntax error in `config.jsonc`, or a missing binary
-referenced in an exec field.
+(JetBrainsMono Nerd Font), JSON syntax error in `config.jsonc`, a missing binary
+referenced in an exec field, or invalid GTK CSS. Waybar uses GTK CSS, so Hyprglass avoids 8-digit `#RRGGBBAA` colors in Waybar and writes `rgba(...)` instead.
 
 ## Lock screen blank / no background
 

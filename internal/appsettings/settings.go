@@ -172,8 +172,12 @@ func wallpaperRepair(reader *bufio.Reader, r command.Runner) {
 			_, _ = r.Run("pkill", "-x", "hyprpaper")
 		}
 		startDetached("hyprpaper")
+		if r.Exists("hyprctl") {
+			wallpaper := filepath.Join(homeDir(), ".config", "hypr", "assets", "wallpapers", "hyprglass-dusk.png")
+			_, _ = r.Run("hyprctl", "hyprpaper", "wallpaper", ", "+wallpaper+", cover")
+		}
 	}
-	fmt.Println("Wallpaper asset copied and hyprpaper.conf rewritten with an absolute path.")
+	fmt.Println("Wallpaper asset copied and hyprpaper.conf rewritten using current hyprpaper syntax.")
 	pause(reader)
 }
 
@@ -374,7 +378,17 @@ func installWallpaperFromSource() error {
 	if err := copyFile(source, target); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), []byte(fmt.Sprintf("# Hyprglass hyprpaper configuration\npreload = %s\nwallpaper = , %s\nsplash = false\n", target, target)), 0o644)
+	return os.WriteFile(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), []byte(fmt.Sprintf(`# Hyprglass hyprpaper configuration
+# Current hyprpaper syntax: one fallback wallpaper block for every monitor.
+wallpaper {
+    monitor =
+    path = %s
+    fit_mode = cover
+}
+
+splash = false
+ipc = true
+`, target)), 0o644)
 }
 
 func sourceRoot() string {
@@ -405,6 +419,14 @@ func sourceRoot() string {
 		}
 	}
 	return ""
+}
+
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
 }
 
 func copyFile(src, dst string) error {

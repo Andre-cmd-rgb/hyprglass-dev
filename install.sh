@@ -102,6 +102,10 @@ write_preferences_json() {
     echo "+ write Hyprglass preferences to $dst"
     return 0
   fi
+  if [[ $UPDATE -eq 1 && -f "$dst" ]]; then
+    echo "Keeping existing Hyprglass preferences at $dst"
+    return 0
+  fi
   mkdir -p "$(dirname "$dst")"
   cat >"$dst" <<EOF
 {
@@ -131,7 +135,7 @@ build_version() {
   elif [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
     v=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || true)
   fi
-  printf '%s\n' "${v:-0.1.0}"
+  printf '%s\n' "${v:-1.0.0}"
 }
 
 ensure_go_cache() {
@@ -275,15 +279,21 @@ write_installed_hyprpaper_config() {
   local wallpaper="$HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png"
   local dst="$HOME/.config/hypr/hyprpaper.conf"
   if [[ $DRY -eq 1 ]]; then
-    echo "+ write absolute wallpaper path to $dst"
+    echo "+ write current hyprpaper wallpaper block with absolute path to $dst"
     return 0
   fi
   mkdir -p "$(dirname "$dst")"
   cat >"$dst" <<EOF
 # Hyprglass hyprpaper configuration
-preload = $wallpaper
-wallpaper = , $wallpaper
+# Current hyprpaper syntax: one fallback wallpaper block for every monitor.
+wallpaper {
+    monitor =
+    path = $wallpaper
+    fit_mode = cover
+}
+
 splash = false
+ipc = true
 EOF
 }
 
@@ -318,23 +328,10 @@ ensure_current_shell_command() {
 
   [[ $CONFIGS_ONLY -eq 0 ]] || return 0
   [[ -x "$target" || $DRY -eq 1 ]] || return 0
-
-  if [[ ":$PATH:" == *":$PREFIX:"* ]]; then
-    return 0
-  fi
-
-  if [[ ":$PATH:" != *":/usr/local/bin:"* ]]; then
-    cat <<MSG
-
-$PREFIX is not on this terminal's current PATH, and /usr/local/bin is not either.
-Future shells are configured. For this terminal run:
-  export PATH="$PREFIX:\$PATH"
-MSG
-    return 0
-  fi
+  [[ "${HYPRGLASS_NO_GLOBAL_LINK:-0}" != 1 ]] || return 0
 
   if [[ $DRY -eq 1 ]]; then
-    echo "+ link $link -> $target so hyprglass works in the current terminal"
+    echo "+ link $link -> $target so Hyprland/Waybar can find hyprglass even if ~/.local/bin is not in the session PATH"
     return 0
   fi
 
@@ -348,12 +345,12 @@ MSG
     cat <<MSG
 
 Could not create $link because sudo is unavailable.
-Future shells are configured. For this terminal run:
+Future shells are configured, but Hyprland/Waybar may not inherit ~/.local/bin.
+If commands do not work from the bar, run:
   export PATH="$PREFIX:\$PATH"
 MSG
   fi
 }
-
 restart_session_components() {
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
   [[ $DRY -eq 0 ]] || return 0
@@ -376,6 +373,10 @@ restart_session_components() {
   pkill -x mako 2>/dev/null || true
   pkill -x hypridle 2>/dev/null || true
   start_bg hyprpaper hyprpaper
+  if command -v hyprctl >/dev/null 2>&1; then
+    sleep 0.3
+    hyprctl hyprpaper wallpaper ", $HOME/.config/hypr/assets/wallpapers/hyprglass-dusk.png, cover" >/dev/null 2>&1 || true
+  fi
   start_bg waybar waybar
   start_bg mako mako
   start_bg hypridle hypridle

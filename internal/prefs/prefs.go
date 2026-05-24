@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -107,7 +108,7 @@ func validScale(v string) bool {
 }
 
 var accentHex = map[string][2]string{
-	"graphite": {"8ea8ff", "b8c7ff"},
+	"graphite": {"9aa0aa", "d8dce2"},
 	"blue":     {"5aa7ff", "98c8ff"},
 	"cyan":     {"4cc9f0", "a7ecff"},
 	"green":    {"7bd88f", "b8f2c2"},
@@ -127,13 +128,13 @@ func PaletteFor(p Preferences) Palette {
 	if p.ThemeMode == "light" {
 		return Palette{
 			Name: p.Accent, Accent: pair[0], Accent2: pair[1],
-			BG: "f7f7f2", Panel: "fffffff0", Text: "16181d", Muted: "68707d", Border: "00000018",
+			BG: "f7f7f2", Panel: "fffffff2", Text: "16181d", Muted: "68707d", Border: "0000001f",
 			Warn: "b7791f", Danger: "d93b4a",
 		}
 	}
 	return Palette{
 		Name: p.Accent, Accent: pair[0], Accent2: pair[1],
-		BG: "0f1115", Panel: "1b1f2acc", Text: "f2f2ec", Muted: "a5adba", Border: "ffffff24",
+		BG: "0b0d10", Panel: "161922d1", Text: "f2f2ec", Muted: "a5adba", Border: "ffffff24",
 		Warn: "ffd166", Danger: "ff7b87",
 	}
 }
@@ -224,10 +225,10 @@ func waybarCSS(p Palette, mode string) string {
 }
 
 window#waybar {
-  background: #%s;
-  border: 1px solid #%s;
+  background: %s;
+  border: 1px solid %s;
   border-radius: 13px;
-  color: #%s;
+  color: %s;
 }
 
 .modules-left,
@@ -238,7 +239,7 @@ window#waybar {
 }
 
 #custom-logo {
-  color: #%s;
+  color: %s;
   font-weight: 700;
   padding: 0 10px 0 4px;
 }
@@ -247,14 +248,14 @@ window#waybar {
 
 #workspaces button {
   background: transparent;
-  color: #%s;
+  color: %s;
   padding: 0 9px;
   margin: 0 1px;
 }
 
 #workspaces button.active {
-  color: #%s;
-  background: #%s;
+  color: %s;
+  background: %s;
   border-radius: 9px;
 }
 
@@ -266,20 +267,37 @@ window#waybar {
 #battery,
 #custom-settings,
 #custom-power {
-  color: #%s;
+  color: %s;
   padding: 0 9px;
   margin: 0 1px;
 }
 
-#clock { color: #%s; }
-#custom-settings { color: #%s; }
-#custom-power { color: #%s; }
+#clock { color: %s; }
+#custom-settings { color: %s; }
+#custom-power { color: %s; }
 #network.disconnected,
-#battery.warning { color: #%s; }
-#battery.critical { color: #%s; }
-#custom-bluetooth.off { color: #%s; }
-#custom-bluetooth.on { color: #%s; }
-`, panelCSS(p.Panel), p.Border, p.Text, p.Text, p.Muted, p.BG, p.Accent, p.Text, p.Muted, p.Accent, p.Danger, p.Warn, p.Danger, p.Muted, p.Accent)
+#battery.warning { color: %s; }
+#battery.critical { color: %s; }
+#custom-bluetooth.off { color: %s; }
+#custom-bluetooth.on { color: %s; }
+`, cssColor(panelCSS(p.Panel)), cssColor(p.Border), cssColor(p.Text), cssColor(p.Text), cssColor(p.Muted), cssColor(p.BG), cssColor(p.Accent), cssColor(p.Text), cssColor(p.Muted), cssColor(p.Accent), cssColor(p.Danger), cssColor(p.Warn), cssColor(p.Danger), cssColor(p.Muted), cssColor(p.Accent))
+}
+
+func cssColor(v string) string {
+	h := strings.TrimPrefix(strings.TrimSpace(v), "#")
+	if len(h) == 6 {
+		return "#" + h
+	}
+	if len(h) == 8 {
+		r, er := strconv.ParseInt(h[0:2], 16, 64)
+		g, eg := strconv.ParseInt(h[2:4], 16, 64)
+		b, eb := strconv.ParseInt(h[4:6], 16, 64)
+		a, ea := strconv.ParseInt(h[6:8], 16, 64)
+		if er == nil && eg == nil && eb == nil && ea == nil {
+			return fmt.Sprintf("rgba(%d, %d, %d, %.2f)", r, g, b, float64(a)/255.0)
+		}
+	}
+	return "#" + h
 }
 
 func panelCSS(v string) string {

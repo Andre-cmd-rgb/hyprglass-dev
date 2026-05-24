@@ -8,6 +8,8 @@ PASS go test ./...
 PASS go vet ./...
 PASS go build
 PASS Hyprland window/layer rule checks
+PASS current hyprpaper wallpaper-block syntax
+PASS Waybar CSS rejects 8-digit GTK-incompatible hex colors
 PASS wallpaper and top bar config chain
 PASS temp configs-only install
 PASS no broken symlinks

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"hyprglass/internal/appsettings"
 	"hyprglass/internal/audio"
@@ -24,7 +25,7 @@ import (
 )
 
 var (
-	version    = "0.1.0"
+	version    = "1.0.0"
 	sourceRoot = ""
 )
 
@@ -280,11 +281,12 @@ func wallpaper(r command.Runner, args []string) {
 		fmt.Println("Usage: hyprglass wallpaper [apply|generate]")
 		os.Exit(2)
 	}
-	if err := installWallpaper(root, source); err != nil {
+	installed, err := installWallpaper(root, source)
+	if err != nil {
 		fmt.Println("could not install wallpaper:", err)
 		os.Exit(1)
 	}
-	restartHyprpaper(r)
+	restartHyprpaper(r, installed)
 	fmt.Println("Wallpaper installed to ~/.config/hypr/assets/wallpapers/hyprglass-dusk.png")
 }
 func update() {
@@ -311,16 +313,38 @@ func update() {
 	}
 }
 func repair() {
-	msg := `Hyprglass repair runs only non-destructive checks in V0.
-Targeted restarts you may choose manually:
-  systemctl --user restart xdg-desktop-portal xdg-desktop-portal-hyprland
-  pkill waybar; waybar &
-  pkill mako; mako &
-  sudo systemctl restart NetworkManager
-  sudo systemctl restart bluetooth
-  sudo systemctl restart ModemManager
-Networking restarts are not automatic because they can drop your current session.`
-	fmt.Println(strings.TrimSpace(msg))
+	r := command.RealRunner{}
+	fmt.Println("Hyprglass repair: refreshing generated config, wallpaper, and session surfaces.")
+	root := findSourceRoot()
+	wallpaper := ""
+	if root != "" {
+		source := filepath.Join(root, "assets", "wallpapers", "hyprglass-dusk.png")
+		installed, err := installWallpaper(root, source)
+		if err != nil {
+			fmt.Println("Wallpaper repair failed:", err)
+		} else {
+			wallpaper = installed
+			fmt.Println("Wallpaper config repaired.")
+		}
+	} else {
+		fmt.Println("Source checkout not found; wallpaper file was not recopied.")
+	}
+	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
+		fmt.Println("Not inside Hyprland; session components were not restarted.")
+		return
+	}
+	if wallpaper != "" {
+		restartHyprpaper(r, wallpaper)
+	}
+	if r.Exists("pkill") {
+		_, _ = r.Run("pkill", "-x", "waybar")
+		_, _ = r.Run("pkill", "-x", "mako")
+		_, _ = r.Run("pkill", "-x", "hypridle")
+	}
+	startDetachedCommand("waybar")
+	startDetachedCommand("mako")
+	startDetachedCommand("hypridle")
+	fmt.Println("Waybar, mako, and hypridle restarted. Network services were not touched.")
 }
 
 func findSourceRoot() string {
@@ -381,23 +405,35 @@ func ensureExecutableBits(root string) {
 	}
 }
 
-func installWallpaper(root, source string) error {
+func installWallpaper(root, source string) (string, error) {
+	_ = root
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
+		return "", err
 	}
 	targetDir := filepath.Join(home, ".config", "hypr", "assets", "wallpapers")
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return err
+		return "", err
 	}
-	if err := copyFile(source, filepath.Join(targetDir, "hyprglass-dusk.png")); err != nil {
-		return err
+	target := filepath.Join(targetDir, "hyprglass-dusk.png")
+	if err := copyFile(source, target); err != nil {
+		return "", err
 	}
-	return writeHyprpaperConfig(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), filepath.Join(targetDir, "hyprglass-dusk.png"))
+	return target, writeHyprpaperConfig(filepath.Join(home, ".config", "hypr", "hyprpaper.conf"), target)
 }
 
 func writeHyprpaperConfig(path, wallpaper string) error {
-	data := fmt.Sprintf("# Hyprglass hyprpaper configuration\npreload = %s\nwallpaper = , %s\nsplash = false\n", wallpaper, wallpaper)
+	data := fmt.Sprintf(`# Hyprglass hyprpaper configuration
+# Current hyprpaper syntax: one fallback wallpaper block for every monitor.
+wallpaper {
+    monitor =
+    path = %s
+    fit_mode = cover
+}
+
+splash = false
+ipc = true
+`, wallpaper)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -424,7 +460,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-func restartHyprpaper(r command.Runner) {
+func restartHyprpaper(r command.Runner, wallpaper string) {
 	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
 		return
 	}
@@ -438,6 +474,20 @@ func restartHyprpaper(r command.Runner) {
 		} else {
 			_ = cmd.Process.Release()
 		}
+	}
+	if wallpaper != "" && r.Exists("hyprctl") {
+		time.Sleep(300 * time.Millisecond)
+		_, _ = r.Run("hyprctl", "hyprpaper", "wallpaper", ", "+wallpaper+", cover")
+	}
+}
+
+func startDetachedCommand(name string) {
+	if _, err := exec.LookPath(name); err != nil {
+		return
+	}
+	cmd := exec.Command(name)
+	if err := cmd.Start(); err == nil {
+		_ = cmd.Process.Release()
 	}
 }
 

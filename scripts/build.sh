@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-VERSION=${HYPRGLASS_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 0.1.0)}
+VERSION=${HYPRGLASS_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 1.0.0)}
 if [[ -z "${GOCACHE:-}" ]]; then
   export GOCACHE="${XDG_CACHE_HOME:-$HOME/.cache}/go-build"
 fi

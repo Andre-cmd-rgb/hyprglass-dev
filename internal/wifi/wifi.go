@@ -55,5 +55,5 @@ func RunTUI(r command.Runner) {
 		}
 		fmt.Printf("%-28s %3d%%%s\n", n.SSID, n.Signal, lock)
 	}
-	fmt.Println("Actions: use nmcli device wifi rescan/connect/disconnect. Interactive password entry is explicit in V0.")
+	fmt.Println("Actions: use nmcli device wifi rescan/connect/disconnect. Password entry stays explicit for safety.")
 }

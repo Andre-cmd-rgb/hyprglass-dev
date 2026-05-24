@@ -7,7 +7,7 @@
 }
 
 window#waybar {
-  background: rgba(15, 17, 21, 0.74);
+  background: rgba(22, 25, 34, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 13px;
   color: #f2f2ec;
@@ -37,7 +37,7 @@ window#waybar {
 
 #workspaces button.active {
   color: #0f1115;
-  background: #8ea8ff;
+  background: #9aa0aa;
   border-radius: 9px;
 }
 
@@ -55,10 +55,10 @@ window#waybar {
 }
 
 #clock { color: #d9dddf; }
-#custom-settings { color: #8ea8ff; }
+#custom-settings { color: #9aa0aa; }
 #custom-power { color: #ffb4a8; }
 #network.disconnected,
 #battery.warning { color: #ffd166; }
 #battery.critical { color: #ff7b87; }
 #custom-bluetooth.off { color: #7f8792; }
-#custom-bluetooth.on { color: #8ea8ff; }
+#custom-bluetooth.on { color: #9aa0aa; }
