@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,6 +57,8 @@ func main() {
 		audio.RunTUI(r)
 	case "display":
 		display.RunTUI(r)
+	case "power":
+		power()
 	case "update":
 		update()
 	case "repair":
@@ -99,11 +102,21 @@ Usage:
   hyprglass --help
   hyprglass version
   hyprglass doctor [--json]
-  hyprglass wifi | bluetooth | lte | audio | display
+  hyprglass wifi | bluetooth | lte | audio | display | power
   hyprglass update
   hyprglass repair
   hyprglass wallpaper generate
 `)
+}
+func power() {
+	fmt.Println(strings.TrimSpace(`Power actions:
+  loginctl lock-session
+  systemctl suspend
+  systemctl poweroff
+
+Hyprglass V0 keeps destructive power commands manual.`))
+	fmt.Print("\nPress Enter to close.")
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 }
 func update() {
 	root := findSourceRoot()

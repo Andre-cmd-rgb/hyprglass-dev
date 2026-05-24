@@ -16,5 +16,5 @@
   "custom/bluetooth": {"exec": "hyprglass bluetooth --status", "interval": 10, "return-type": "json", "on-click": "kitty --class hyprglass-float --title 'Hyprglass :: Bluetooth' -e hyprglass bluetooth"},
   "pulseaudio": {"format": "  {volume}%", "format-muted": "󰝟 muted", "on-click": "kitty --class hyprglass-float --title 'Hyprglass :: Audio' -e hyprglass audio"},
   "battery": {"format": "{icon} {capacity}%", "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"], "on-click": "kitty --class hyprglass-float --title 'Hyprglass :: Doctor' -e hyprglass doctor"},
-  "custom/power": {"format": "⏻", "tooltip": "Power actions are intentionally manual in V0", "on-click": "kitty --class hyprglass-float --title 'Hyprglass :: Power' -e sh -lc 'printf "Power actions:\n  loginctl lock-session\n  systemctl suspend\n  systemctl poweroff\n\nHyprglass V0 does not hide destructive actions behind a pretty button.\n"; read -r _'"}
+  "custom/power": {"format": "⏻", "tooltip": "Power actions are intentionally manual in V0", "on-click": "kitty --class hyprglass-float --title 'Hyprglass :: Power' -e hyprglass power"}
 }
