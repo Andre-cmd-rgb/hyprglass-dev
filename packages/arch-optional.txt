@@ -1,0 +1,8 @@
+fish
+fastfetch
+btop
+brightnessctl
+playerctl
+pavucontrol
+nwg-look
+qt6ct
