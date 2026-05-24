@@ -19,16 +19,20 @@ fi
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/hyprglass-check.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
-version=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 1.0.0)
+version=$(tr -d "[:space:]" < "$ROOT/VERSION" 2>/dev/null || git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf dev)
 
 run bash -n install.sh uninstall.sh scripts/*.sh || fail "shell syntax"
+[[ -r VERSION ]] || fail "VERSION file missing"
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$|^dev$ ]] || fail "VERSION must be semver or dev"
 if command -v shellcheck >/dev/null 2>&1; then shellcheck install.sh uninstall.sh scripts/*.sh || fail "shellcheck"; else warn "shellcheck missing"; fi
 if [[ -n $(gofmt -l .) ]]; then gofmt -l .; fail "gofmt needed"; fi
 run go test ./... || fail "go test"
 run go vet ./... || fail "go vet"
 run go build -buildvcs=false -ldflags "-s -w -X main.version=$version -X main.sourceRoot=$ROOT" -o "$tmpdir/hyprglass" ./cmd/hyprglass || fail "go build"
 run "$tmpdir/hyprglass" --help >/dev/null || fail "hyprglass help"
+run "$tmpdir/hyprglass" system --json >/dev/null || fail "hyprglass system json"
 printf 'q\n' | "$tmpdir/hyprglass" power >/dev/null || fail "hyprglass power menu"
+printf 'q\n' | "$tmpdir/hyprglass" settings >/dev/null || fail "hyprglass settings close path"
 printf 'q\n' | "$tmpdir/hyprglass" laptop >/dev/null || fail "hyprglass laptop menu"
 json=$("$tmpdir/hyprglass" doctor --json) || fail "doctor json command"
 if command -v jq >/dev/null 2>&1; then echo "$json" | jq . >/dev/null || fail "invalid doctor JSON"; else warn "jq missing; JSON validation by jq skipped"; fi
@@ -42,6 +46,9 @@ grep -Fq "wallpaper {" config/hypr/hyprpaper.conf || fail "hyprpaper config must
 if grep -RniE '^[[:space:]]*(preload[[:space:]]*=|wallpaper[[:space:]]*=)' config/hypr/hyprpaper.conf; then fail "hyprpaper config uses removed legacy syntax"; fi
 [[ -f assets/wallpapers/hyprglass-dusk.png ]] || fail "wallpaper asset missing"
 [[ -f config/waybar/config.jsonc && -f config/waybar/style.css ]] || fail "waybar config/style missing"
+grep -Fq "setsid -f kitty" config/waybar/config.jsonc || fail "Waybar click commands must detach Settings from Waybar"
+if grep -n 'pkill.*-x.*waybar' internal/appsettings/settings.go | grep -v SIGUSR2; then fail "Settings must not hard-kill Waybar; it can kill the bar when launched from the bar"; fi
+grep -Fq 'SIGUSR2' internal/appsettings/settings.go || fail "Settings must reload Waybar with SIGUSR2"
 if grep -RniE '#[0-9a-fA-F]{8}([[:space:];]|$)' config/waybar/style.css; then fail "Waybar GTK CSS must not use 8-digit hex colors"; fi
 pass "wallpaper and top bar config chain present"
 install_home="$tmpdir/home"
@@ -61,8 +68,22 @@ HOME="$install_home" "$tmpdir/hyprglass" wallpaper apply >/dev/null || fail "wal
 pass "temp install replaces generated config and copies wallpaper/top bar files"
 find . -xtype l -print -quit | grep -q . && fail "broken symlink found" || pass "no broken symlinks"
 for s in scripts/*.sh scripts/*.py; do [[ -x $s ]] || fail "$s not executable"; done
-if [[ $(sort packages/arch-core.txt | uniq -d | wc -l) -ne 0 ]]; then fail "duplicate package in arch-core"; else pass "no duplicate core packages"; fi
-if command -v pacman >/dev/null 2>&1; then while read -r p; do [[ -z $p || $p =~ ^# ]] && continue; pacman -Si "$p" >/dev/null || fail "pacman cannot verify $p"; done < packages/arch-core.txt; else warn "pacman missing; Arch package verification skipped on this host"; fi
+for pkg_file in packages/arch-core.txt packages/cachyos-core.txt; do
+  [[ -f "$pkg_file" ]] || { fail "missing package profile $pkg_file"; continue; }
+  if [[ $(grep -vE '^\s*(#|$)' "$pkg_file" | sort | uniq -d | wc -l) -ne 0 ]]; then
+    fail "duplicate package in $pkg_file"
+  else
+    pass "no duplicate packages in $pkg_file"
+  fi
+done
+if command -v pacman >/dev/null 2>&1; then
+  while read -r p; do [[ -z $p || $p =~ ^# ]] && continue; pacman -Si "$p" >/dev/null || fail "pacman cannot verify Arch package $p"; done < packages/arch-core.txt
+  if grep -qi '^ID=cachyos' /etc/os-release 2>/dev/null; then
+    while read -r p; do [[ -z $p || $p =~ ^# ]] && continue; pacman -Si "$p" >/dev/null || fail "pacman cannot verify CachyOS package $p"; done < packages/cachyos-core.txt
+  fi
+else
+  warn "pacman missing; Arch/CachyOS package verification skipped on this host"
+fi
 if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && command -v hyprctl >/dev/null 2>&1; then hyprctl monitors -j >/dev/null || fail "hyprctl monitors"; else skip "not inside Hyprland; runtime compositor checks skipped"; fi
 if grep -RniIE --exclude-dir=.git --exclude-dir=build --exclude-dir=config --exclude-dir=docs --exclude=check.sh "TODO|FIXME|placeholder|maybe|probably|guess|fake|stub|not implemented" .; then fail "weak leftovers found"; else pass "no weak leftovers"; fi
 if [[ $FAIL -eq 1 ]]; then echo "FINAL: FAIL"; echo "Rerun: ./scripts/check.sh"; exit 1; fi

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Argument parsing
-YES=0 DRY=0 NO_PACKAGES=0 CONFIGS_ONLY=0 UPDATE=0 SKIP_SETUP=0
+YES=0 DRY=0 NO_PACKAGES=0 CONFIGS_ONLY=0 UPDATE=0 SKIP_SETUP=0 RATE_MIRRORS=0 AUTO_HARDWARE=0
+DISTRO=auto
 SETUP_THEME=dark
 SETUP_ACCENT=graphite
 SETUP_LAYOUT=us
@@ -10,6 +11,8 @@ SETUP_VARIANT=
 SETUP_SCALE=auto
 SETUP_MODEM_APN=
 SETUP_MODEM_PIN=
+SETUP_ENABLE_SERVICES=1
+SETUP_CACHY_CHWD=0
 PREFIX="${HYPRGLASS_PREFIX:-${HOME}/.local/bin}"
 
 for a in "$@"; do
@@ -20,6 +23,9 @@ for a in "$@"; do
     --configs-only) CONFIGS_ONLY=1; NO_PACKAGES=1 ;;
     --update)       UPDATE=1; YES=1; NO_PACKAGES=1 ;;
     --skip-setup)   SKIP_SETUP=1 ;;
+    --rate-mirrors) RATE_MIRRORS=1 ;;
+    --auto-hardware) AUTO_HARDWARE=1; SETUP_CACHY_CHWD=1 ;;
+    --distro=*)     DISTRO="${a#*=}" ;;
     --help|-h)
       cat <<HELP
 Usage: install.sh [options]
@@ -32,6 +38,11 @@ Usage: install.sh [options]
   --yes            Overwrite existing configs without prompting
   --dry-run        Print what would happen; make no changes
   --skip-setup     Use defaults instead of first-setup questions
+  --distro=auto|arch|cachyos
+                  Select package profile. Default auto-detects /etc/os-release.
+  --rate-mirrors   On CachyOS, run cachyos-rate-mirrors before package install.
+  --auto-hardware  On CachyOS, run chwd -a after package install.
+                  This is opt-in because driver changes are OS-level.
   --help           Show this help
 
 Examples:
@@ -52,6 +63,50 @@ fi
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 run(){ echo "+ $*"; [[ $DRY -eq 1 ]] || "$@"; }
+
+os_release_value() {
+  local key="$1"
+  [[ -r /etc/os-release ]] || return 1
+  awk -F= -v k="$key" '$1==k {gsub(/^"|"$/, "", $2); print tolower($2); exit}' /etc/os-release
+}
+
+is_cachyos() {
+  local d="${DISTRO,,}" id like
+  [[ "$d" == cachyos ]] && return 0
+  [[ "$d" == arch ]] && return 1
+  id=$(os_release_value ID 2>/dev/null || true)
+  like=$(os_release_value ID_LIKE 2>/dev/null || true)
+  [[ "$id" == cachyos || " $like " == *" arch "* && "$id" == cachyos ]]
+}
+
+package_file() {
+  local d="${DISTRO,,}"
+  case "$d" in
+    cachyos) printf '%s\n' "$ROOT/packages/cachyos-core.txt"; return 0 ;;
+    arch)    printf '%s\n' "$ROOT/packages/arch-core.txt"; return 0 ;;
+    auto)    ;;
+    *)       echo "unknown distro profile: $DISTRO" >&2; exit 2 ;;
+  esac
+  if is_cachyos && [[ -f "$ROOT/packages/cachyos-core.txt" ]]; then
+    printf '%s\n' "$ROOT/packages/cachyos-core.txt"
+  else
+    printf '%s\n' "$ROOT/packages/arch-core.txt"
+  fi
+}
+
+rank_cachyos_mirrors_if_requested() {
+  [[ $RATE_MIRRORS -eq 1 ]] || return 0
+  if ! is_cachyos; then
+    echo "--rate-mirrors requested, but this is not detected as CachyOS. Skipping."
+    return 0
+  fi
+  if ! command -v cachyos-rate-mirrors >/dev/null 2>&1; then
+    echo "cachyos-rate-mirrors is missing. Skipping mirror ranking."
+    return 0
+  fi
+  run sudo cachyos-rate-mirrors
+}
+
 ask(){
   [[ $YES -eq 1 || $DRY -eq 1 ]] && return 0
   read -r -p "$1 [y/N] " ans
@@ -68,28 +123,48 @@ prompt_default() {
   printf -v "$var_name" '%s' "${answer:-$default}"
 }
 
+prompt_yes_no_default() {
+  local var_name="$1" label="$2" default="$3" answer normalized
+  if [[ $YES -eq 1 || $DRY -eq 1 || $SKIP_SETUP -eq 1 ]]; then
+    [[ "$default" == y || "$default" == Y || "$default" == yes ]] && printf -v "$var_name" '1' || printf -v "$var_name" '0'
+    return 0
+  fi
+  read -r -p "$label [$default]: " answer
+  normalized="${answer:-$default}"
+  [[ "$normalized" == y || "$normalized" == Y || "$normalized" == yes || "$normalized" == YES ]] && printf -v "$var_name" '1' || printf -v "$var_name" '0'
+}
+
 run_first_setup() {
   [[ $UPDATE -eq 0 ]] || return 0
   if [[ $DRY -eq 1 ]]; then
-    echo "+ first setup would ask theme, accent, keyboard layout, display scale, and modem defaults"
+    echo "+ first setup would ask theme, accent, keyboard layout, display scale, services, CachyOS hardware, and modem defaults"
     return 0
   fi
-  [[ $YES -eq 0 && $SKIP_SETUP -eq 0 ]] || return 0
+  if [[ $YES -eq 1 || $SKIP_SETUP -eq 1 ]]; then
+    [[ $AUTO_HARDWARE -eq 1 ]] && SETUP_CACHY_CHWD=1
+    return 0
+  fi
   cat <<MSG
 
 ==> Hyprglass first setup
-Choose sane defaults now. You can change all of this later with Super+I.
+Choose sane defaults now. You can change user-facing settings later with Super+I.
+Driver/service setup happens here so Settings can stay simple.
 MSG
   prompt_default SETUP_THEME "Theme mode: dark or light" "dark"
   prompt_default SETUP_ACCENT "Accent: graphite, blue, cyan, green, orange, red, pink, purple" "graphite"
   prompt_default SETUP_LAYOUT "Keyboard layout: us, it, es, gb, de" "us"
   prompt_default SETUP_VARIANT "Keyboard variant, empty is fine" ""
   prompt_default SETUP_SCALE "Display scale: auto, 1.25, 1.5, 1.75, 2" "auto"
-  read -r -p "Configure LTE/5G modem APN now? empty skips: " SETUP_MODEM_APN
+  prompt_yes_no_default SETUP_ENABLE_SERVICES "Enable hardware/session services now? NetworkManager, Bluetooth, ModemManager, power profiles" "Y"
+  read -r -p "LTE/5G modem APN for autoconnect, empty skips modem setup: " SETUP_MODEM_APN
   if [[ -n "$SETUP_MODEM_APN" ]]; then
     read -r -s -p "SIM PIN for autounlock, empty skips PIN storage: " SETUP_MODEM_PIN
     printf '\n'
   fi
+  if is_cachyos; then
+    prompt_yes_no_default SETUP_CACHY_CHWD "Run CachyOS hardware auto-configuration after install? Uses sudo chwd -a" "N"
+  fi
+  [[ $AUTO_HARDWARE -eq 1 ]] && SETUP_CACHY_CHWD=1
 }
 
 json_escape() {
@@ -132,10 +207,12 @@ build_version() {
   local v=""
   if [[ -n "${HYPRGLASS_VERSION:-}" ]]; then
     v="$HYPRGLASS_VERSION"
+  elif [[ -r "$ROOT/VERSION" ]]; then
+    v=$(tr -d '[:space:]' < "$ROOT/VERSION")
   elif [[ -d "$ROOT/.git" ]] && command -v git >/dev/null 2>&1; then
     v=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || true)
   fi
-  printf '%s\n' "${v:-1.0.0}"
+  printf '%s\n' "${v:-dev}"
 }
 
 ensure_go_cache() {
@@ -427,9 +504,13 @@ fi
 # Packages
 if [[ $NO_PACKAGES -eq 0 ]]; then
   if command -v pacman >/dev/null 2>&1; then
-    mapfile -t pkgs < <(grep -vE '^\s*(#|$)' "$ROOT/packages/arch-core.txt" | sort -u)
+    pkg_file=$(package_file)
+    echo "Package profile: ${pkg_file#$ROOT/}"
+    [[ -f "$pkg_file" ]] || { echo "Missing package profile: $pkg_file"; exit 1; }
+    rank_cachyos_mirrors_if_requested
+    mapfile -t pkgs < <(grep -vE '^\s*(#|$)' "$pkg_file" | sort -u)
     if [[ ${#pkgs[@]} -eq 0 ]]; then
-      echo "No packages listed in packages/arch-core.txt; skipping package install."
+      echo "No packages listed in ${pkg_file#$ROOT/}; skipping package install."
     else
       run sudo pacman -S --needed "${pkgs[@]}"
     fi
@@ -513,19 +594,23 @@ enable_service_if_present() {
   fi
 }
 
-if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 ]]; then
-  if ask "Enable network, Bluetooth, modem, and power services now?"; then
-    for svc in NetworkManager.service bluetooth.service ModemManager.service power-profiles-daemon.service; do
-      enable_service_if_present "$svc"
-    done
-  fi
+if command -v systemctl >/dev/null 2>&1 && [[ $DRY -eq 0 && $UPDATE -eq 0 && "${HYPRGLASS_SKIP_SERVICES:-0}" != 1 && $SETUP_ENABLE_SERVICES -eq 1 ]]; then
+  for svc in NetworkManager.service bluetooth.service ModemManager.service power-profiles-daemon.service; do
+    enable_service_if_present "$svc"
+  done
 fi
 
 if [[ $DRY -eq 0 && $UPDATE -eq 0 && -n "$SETUP_MODEM_APN" && -x "$ROOT/scripts/hyprglass-modem-autounlock-install.sh" ]]; then
-  if ask "Install modem autounlock/autoconnect service?"; then
-    args=("$ROOT/scripts/hyprglass-modem-autounlock-install.sh" --apn "$SETUP_MODEM_APN")
-    [[ -n "$SETUP_MODEM_PIN" ]] && args+=(--pin "$SETUP_MODEM_PIN")
-    sudo bash "${args[@]}"
+  args=("$ROOT/scripts/hyprglass-modem-autounlock-install.sh" --apn "$SETUP_MODEM_APN")
+  [[ -n "$SETUP_MODEM_PIN" ]] && args+=(--pin "$SETUP_MODEM_PIN")
+  sudo bash "${args[@]}"
+fi
+
+if [[ $DRY -eq 0 && $UPDATE -eq 0 && $SETUP_CACHY_CHWD -eq 1 ]]; then
+  if is_cachyos && command -v chwd >/dev/null 2>&1; then
+    sudo chwd -a
+  else
+    echo "Skipping CachyOS hardware auto-configuration: chwd is unavailable or this is not CachyOS."
   fi
 fi
 

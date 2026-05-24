@@ -2,10 +2,10 @@ package doctor
 
 import (
 	"hyprglass/internal/command"
+	"hyprglass/internal/platform"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 type Check struct {
@@ -31,17 +31,34 @@ func Run(r command.Runner) Result {
 	} else {
 		add("operating system", "pass", "Linux detected", "")
 	}
-	if b, err := os.ReadFile("/etc/os-release"); err == nil && strings.Contains(strings.ToLower(string(b)), "arch") {
-		add("arch detection", "pass", "/etc/os-release looks like Arch", "")
+	info := platform.Read()
+	if info.ArchLike {
+		label := "Arch-like Linux detected"
+		if info.CachyOS {
+			label = "CachyOS detected"
+		}
+		add("distro", "pass", label+" ("+info.DisplayName()+")", "")
 	} else {
-		add("arch detection", "warn", "this environment does not look like Arch", "Run on Arch for package verification")
+		add("distro", "warn", "this environment does not look Arch-compatible", "Run on Arch Linux or CachyOS for package verification")
+	}
+	if info.CachyOS {
+		if r.Exists("cachyos-rate-mirrors") {
+			add("cachyos-rate-mirrors", "pass", "available", "")
+		} else {
+			add("cachyos-rate-mirrors", "warn", "missing", "Install/repair CachyOS tools or use CachyOS Hello")
+		}
+		if r.Exists("chwd") {
+			add("chwd", "pass", "CachyOS hardware detection available", "")
+		} else {
+			add("chwd", "warn", "CachyOS hardware detection missing", "Install/repair chwd if hardware driver management is needed")
+		}
 	}
 	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" {
 		add("hyprland session", "pass", "Hyprland session variable present", "")
 	} else {
 		add("hyprland session", "warn", "not inside Hyprland; runtime compositor checks skipped", "Start Hyprland then rerun doctor")
 	}
-	for _, c := range []string{"hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go", "brightnessctl", "playerctl", "powerprofilesctl", "sensors", "cava", "pfetch"} {
+	for _, c := range []string{"pacman", "hyprctl", "kitty", "waybar", "hyprlock", "hypridle", "hyprpaper", "fuzzel", "mako", "nmcli", "bluetoothctl", "mmcli", "wpctl", "grim", "slurp", "wl-copy", "systemctl", "loginctl", "jq", "go", "brightnessctl", "playerctl", "powerprofilesctl", "sensors", "cava", "pfetch", "uname"} {
 		if r.Exists(c) {
 			add("command: "+c, "pass", "found", "")
 		} else {

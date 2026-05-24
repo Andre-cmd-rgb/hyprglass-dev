@@ -20,12 +20,13 @@ import (
 	"hyprglass/internal/doctor"
 	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
+	hgsystem "hyprglass/internal/system"
 	"hyprglass/internal/tui"
 	"hyprglass/internal/wifi"
 )
 
 var (
-	version    = "1.0.0"
+	version    = "dev"
 	sourceRoot = ""
 )
 
@@ -67,6 +68,8 @@ func main() {
 		laptop.RunTUI(r, args[1:])
 	case "settings":
 		appsettings.Run(r, args[1:], version)
+	case "system", "cachyos":
+		hgsystem.RunTUI(r, args[1:])
 	case "power":
 		power(r)
 	case "visualizer", "cava":
@@ -101,7 +104,7 @@ Usage:
   hyprglass version
   hyprglass info
   hyprglass doctor [--json]
-  hyprglass wifi | bluetooth | lte | audio | display | laptop | settings | power
+  hyprglass wifi | bluetooth | lte | audio | display | laptop | settings | system | power
   hyprglass cava
   hyprglass touchid [status|enroll|verify]
   hyprglass update
@@ -485,7 +488,17 @@ func startDetachedCommand(name string) {
 	if _, err := exec.LookPath(name); err != nil {
 		return
 	}
+	devNull, _ := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if devNull != nil {
+		defer devNull.Close()
+	}
 	cmd := exec.Command(name)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if devNull != nil {
+		cmd.Stdin = devNull
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+	}
 	if err := cmd.Start(); err == nil {
 		_ = cmd.Process.Release()
 	}

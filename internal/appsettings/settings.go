@@ -12,12 +12,14 @@ import (
 	"hyprglass/internal/laptop"
 	"hyprglass/internal/lte"
 	"hyprglass/internal/prefs"
+	hgsystem "hyprglass/internal/system"
 	"hyprglass/internal/tui"
 	"hyprglass/internal/wifi"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 func Run(r command.Runner, args []string, version string) {
@@ -59,15 +61,12 @@ func runMenu(r command.Runner, version string) {
 		fmt.Printf("keyboard: %s %s\n", p.KeyboardLayout, emptyDash(p.KeyboardVariant))
 		fmt.Println()
 		fmt.Println("  1  Appearance")
-		fmt.Println("  2  Display and scaling")
-		fmt.Println("  3  Keyboard layout")
-		fmt.Println("  4  Wallpaper repair")
-		fmt.Println("  5  Network, Bluetooth, and modem")
-		fmt.Println("  6  Audio")
-		fmt.Println("  7  Power and battery")
-		fmt.Println("  8  Services")
-		fmt.Println("  9  Update")
-		fmt.Println("  d  Doctor")
+		fmt.Println("  2  Display, scaling, and keyboard")
+		fmt.Println("  3  Network, Bluetooth, and modem")
+		fmt.Println("  4  Audio")
+		fmt.Println("  5  Power and battery")
+		fmt.Println("  6  Update")
+		fmt.Println("  7  Developer options")
 		fmt.Println("  q  Close")
 		fmt.Print("\nSelect: ")
 		choice := readLine(reader)
@@ -75,25 +74,18 @@ func runMenu(r command.Runner, version string) {
 		case "1":
 			appearance(reader, r)
 		case "2":
-			displayAndScaling(reader, r)
+			displayKeyboard(reader, r)
 		case "3":
-			keyboard(reader, r)
-		case "4":
-			wallpaperRepair(reader, r)
-		case "5":
 			connectivity(reader, r)
-		case "6":
+		case "4":
 			audio.RunTUI(r)
 			pause(reader)
-		case "7":
+		case "5":
 			laptop.RunTUI(r, nil)
-		case "8":
-			services(reader, r)
-		case "9":
+		case "6", "u":
 			update(reader, r)
-		case "d":
-			tui.PrintChecks(doctor.Run(r))
-			pause(reader)
+		case "7", "d":
+			developerOptions(reader, r)
 		case "q", "":
 			fmt.Println("Closed.")
 			return
@@ -137,6 +129,35 @@ func displayAndScaling(reader *bufio.Reader, r command.Runner) {
 	scale := readLine(reader)
 	if scale != "" {
 		p.MonitorScale = scale
+	}
+	saveApplyReload(reader, r, p)
+}
+
+func displayKeyboard(reader *bufio.Reader, r command.Runner) {
+	p := prefs.Load()
+	clear()
+	tui.Header("Display and keyboard")
+	if r.Exists("hyprctl") {
+		display.RunTUI(r)
+		fmt.Println()
+	}
+	fmt.Println("Scale choices: auto, 1.25, 1.5, 1.75, 2")
+	fmt.Print("Display scale (enter keeps current): ")
+	scale := readLine(reader)
+	if scale != "" {
+		p.MonitorScale = scale
+	}
+	fmt.Println()
+	fmt.Println("Keyboard examples: us, it, es, gb, de. Variant can stay empty.")
+	fmt.Print("Keyboard layout (enter keeps current): ")
+	layout := readLine(reader)
+	if layout != "" {
+		p.KeyboardLayout = layout
+	}
+	fmt.Print("Keyboard variant (enter keeps current): ")
+	variant := readLine(reader)
+	if variant != "" {
+		p.KeyboardVariant = variant
 	}
 	saveApplyReload(reader, r, p)
 }
@@ -205,6 +226,43 @@ func connectivity(reader *bufio.Reader, r command.Runner) {
 			modemAutounlock(reader, r)
 		case "q", "":
 			return
+		}
+	}
+}
+
+func developerOptions(reader *bufio.Reader, r command.Runner) {
+	for {
+		clear()
+		tui.Header("Developer options")
+		fmt.Println("Advanced actions are hidden here so the normal Settings screen stays simple.")
+		fmt.Println()
+		fmt.Println("  1  Doctor")
+		fmt.Println("  2  Services")
+		fmt.Println("  3  Wallpaper repair")
+		fmt.Println("  4  System and CachyOS")
+		fmt.Println("  5  Raw keyboard page")
+		fmt.Println("  6  Raw display page")
+		fmt.Println("  q  Back")
+		fmt.Print("\nSelect: ")
+		switch strings.ToLower(readLine(reader)) {
+		case "1":
+			tui.PrintChecks(doctor.Run(r))
+			pause(reader)
+		case "2":
+			services(reader, r)
+		case "3":
+			wallpaperRepair(reader, r)
+		case "4":
+			hgsystem.RunTUI(r, nil)
+		case "5":
+			keyboard(reader, r)
+		case "6":
+			displayAndScaling(reader, r)
+		case "q", "":
+			return
+		default:
+			fmt.Println("Unknown selection.")
+			pause(reader)
 		}
 	}
 }
@@ -356,12 +414,13 @@ func reloadSession(r command.Runner) {
 	if r.Exists("hyprctl") {
 		_, _ = r.Run("hyprctl", "reload")
 	}
+	// Waybar supports a reload action on signal. Avoid killing it from inside Settings:
+	// children spawned from a terminal can inherit the terminal session and die when Settings closes.
 	if r.Exists("pkill") {
-		_, _ = r.Run("pkill", "-x", "waybar")
-		_, _ = r.Run("pkill", "-x", "mako")
+		_, _ = r.Run("pkill", "-SIGUSR2", "-x", "waybar")
 	}
-	startDetached("waybar")
-	startDetached("mako")
+	ensureDetachedProcess(r, "waybar")
+	ensureDetachedProcess(r, "mako")
 }
 
 func installWallpaperFromSource() error {
@@ -440,11 +499,33 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, b, 0o644)
 }
 
+func ensureDetachedProcess(r command.Runner, name string) {
+	if !r.Exists("pgrep") || !r.Exists(name) {
+		if r.Exists(name) {
+			startDetached(name)
+		}
+		return
+	}
+	if _, err := r.Run("pgrep", "-x", name); err != nil {
+		startDetached(name)
+	}
+}
+
 func startDetached(name string) {
 	if _, err := exec.LookPath(name); err != nil {
 		return
 	}
+	devNull, _ := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if devNull != nil {
+		defer devNull.Close()
+	}
 	cmd := exec.Command(name)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if devNull != nil {
+		cmd.Stdin = devNull
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+	}
 	if err := cmd.Start(); err == nil {
 		_ = cmd.Process.Release()
 	}

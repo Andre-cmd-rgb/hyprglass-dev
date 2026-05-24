@@ -1,6 +1,6 @@
 .PHONY: build check clean install test vet wallpaper
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || printf 1.0.0)
+VERSION ?= $(shell tr -d "[:space:]" < VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || printf dev)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.sourceRoot=$(CURDIR)
 GO_CACHE ?= $(shell if [ -n "$$GOCACHE" ]; then printf '%s' "$$GOCACHE"; elif mkdir -p "$${XDG_CACHE_HOME:-$$HOME/.cache}/go-build" 2>/dev/null && [ -w "$${XDG_CACHE_HOME:-$$HOME/.cache}/go-build" ]; then printf '%s' "$${XDG_CACHE_HOME:-$$HOME/.cache}/go-build"; else printf '%s' "$${TMPDIR:-/tmp}/hyprglass-go-cache"; fi)
 

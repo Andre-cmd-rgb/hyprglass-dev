@@ -39,8 +39,10 @@ func timeoutFor(name string, args ...string) time.Duration {
 		return 60 * time.Second
 	case "fprintd-enroll", "fprintd-verify", "fprintd-list":
 		return 90 * time.Second
-	case "powerprofilesctl", "sensors", "upower":
+	case "powerprofilesctl", "sensors", "upower", "uname":
 		return 20 * time.Second
+	case "pacman", "chwd", "cachyos-rate-mirrors":
+		return 120 * time.Second
 	case "pfetch", "fastfetch":
 		return 20 * time.Second
 	default:
