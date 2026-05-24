@@ -51,4 +51,6 @@
 | Super+M | LTE/Modem TUI |
 | Super+A | Audio TUI |
 | Super+D | Display TUI |
+| Super+I | Settings TUI |
+| Super+Shift+P | Power menu |
 | Super+/ | Open this shortcut reference |

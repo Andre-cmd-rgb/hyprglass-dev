@@ -4,3 +4,4 @@ btop
 pavucontrol
 nwg-look
 qt6ct
+fprintd

@@ -19,7 +19,7 @@ ask() {
 backup="$HOME/.config/hyprglass-backups/uninstall-$(date +%Y%m%d-%H%M%S)"
 backup_configs() {
   mkdir -p "$backup"
-  for d in hypr kitty waybar mako fuzzel gtk-3.0 qt6ct hyprglass hyprlock hypridle; do
+  for d in hypr kitty waybar mako fuzzel gtk-3.0 gtk-4.0 qt6ct hyprglass hyprlock hypridle; do
     [[ -e "$HOME/.config/$d" ]] && cp -a "$HOME/.config/$d" "$backup/"
   done
 }
@@ -27,7 +27,7 @@ backup_configs() {
 echo "This removes Hyprglass-installed configs after taking a backup."
 ask "Continue?" || exit 0
 backup_configs
-for d in hypr kitty waybar mako fuzzel gtk-3.0 qt6ct hyprglass hyprlock hypridle; do
+for d in hypr kitty waybar mako fuzzel gtk-3.0 gtk-4.0 qt6ct hyprglass hyprlock hypridle; do
   [[ -e "$HOME/.config/$d" ]] && rm -rf "$HOME/.config/$d"
 done
 rm -f "$HOME/.local/bin/hyprglass"

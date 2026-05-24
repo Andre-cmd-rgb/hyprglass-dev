@@ -71,7 +71,16 @@ hyprglass bluetooth
 hyprglass lte
 hyprglass audio
 hyprglass display
+hyprglass settings
+hyprglass power
+hyprglass wallpaper apply
+hyprglass touchid status
 ```
+
+`hyprglass wallpaper apply` installs the Hyprglass wallpaper into
+`~/.config/hypr/assets/wallpapers/`, refreshes `hyprpaper.conf`, and restarts
+hyprpaper inside a Hyprland session. `hyprglass touchid` checks and runs fprintd
+enrollment/verification, but it does not edit PAM automatically.
 
 ## Shortcuts
 

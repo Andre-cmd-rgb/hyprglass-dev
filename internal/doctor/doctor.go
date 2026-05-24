@@ -48,6 +48,11 @@ func Run(r command.Runner) Result {
 			add("command: "+c, "warn", "missing", "Install the package that provides "+c)
 		}
 	}
+	if r.Exists("fprintd-enroll") && r.Exists("fprintd-verify") {
+		add("fingerprint tools", "pass", "fprintd commands found", "")
+	} else {
+		add("fingerprint tools", "warn", "fprintd not installed", "Install fprintd to use hyprglass touchid")
+	}
 	if os.Geteuid() == 0 {
 		add("user level", "warn", "running as root", "Run user-level checks as normal user")
 	} else {

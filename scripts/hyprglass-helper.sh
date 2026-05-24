@@ -16,7 +16,7 @@ backup_configs() {
   local dst
   dst="$HOME/.config/hyprglass-backups/manual-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$dst"
-  for d in hypr kitty waybar mako fuzzel gtk-3.0 qt6ct hyprglass hyprlock hypridle; do
+  for d in hypr kitty waybar mako fuzzel gtk-3.0 gtk-4.0 qt6ct hyprglass hyprlock hypridle; do
     [[ -e "$HOME/.config/$d" ]] && cp -a "$HOME/.config/$d" "$dst/"
   done
   echo "Backed up installed configs to $dst"

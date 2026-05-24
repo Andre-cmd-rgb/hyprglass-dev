@@ -25,6 +25,11 @@ Start from a TTY with `start-hyprland` (0.53+) or `Hyprland` and read the printe
 
 Hyprpaper needs `~/.config/hypr/hyprpaper.conf`. Confirm `exec-once = hyprpaper` is in
 `autostart.conf` and that the wallpaper path in `hyprpaper.conf` exists.
+Re-apply and restart hyprpaper with:
+
+```
+hyprglass wallpaper apply
+```
 
 ## Waybar not showing
 
@@ -116,6 +121,31 @@ pgrep -a polkit
 ```
 If missing, `exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1`
 must be in `autostart.conf`.
+
+## Nautilus or GTK apps are light themed
+
+Hyprglass installs GTK3 and GTK4 settings and sets the libadwaita color-scheme to
+dark when `gsettings` is available. Re-run:
+
+```
+./install.sh --no-packages --yes
+```
+
+Then restart Nautilus.
+
+## Touch ID / fingerprint
+
+Install `fprintd`, then run:
+
+```
+hyprglass touchid status
+hyprglass touchid enroll
+hyprglass touchid verify
+```
+
+Hyprglass does not edit PAM automatically because a bad PAM edit can lock users
+out of sudo or login. Enable fingerprint auth only after reviewing your distro's
+PAM guidance.
 
 ## Kitty too transparent
 

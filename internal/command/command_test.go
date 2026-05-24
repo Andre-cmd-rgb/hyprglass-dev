@@ -23,6 +23,9 @@ func TestTimeoutForSlowCommands(t *testing.T) {
 	if got := timeoutFor("python3", "scripts/generate-wallpaper.py"); got != 60*time.Second {
 		t.Fatalf("python3 timeout = %s", got)
 	}
+	if got := timeoutFor("fprintd-enroll"); got != 90*time.Second {
+		t.Fatalf("fprintd enroll timeout = %s", got)
+	}
 	if got := timeoutFor("true"); got != 15*time.Second {
 		t.Fatalf("default timeout = %s", got)
 	}

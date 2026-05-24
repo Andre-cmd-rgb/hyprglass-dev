@@ -37,6 +37,8 @@ func timeoutFor(name string, args ...string) time.Duration {
 		return 15 * time.Second
 	case "python3":
 		return 60 * time.Second
+	case "fprintd-enroll", "fprintd-verify", "fprintd-list":
+		return 90 * time.Second
 	default:
 		return 15 * time.Second
 	}

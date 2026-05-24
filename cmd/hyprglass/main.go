@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,30 +58,18 @@ func main() {
 		audio.RunTUI(r)
 	case "display":
 		display.RunTUI(r)
+	case "settings":
+		settings(r)
 	case "power":
-		power()
+		power(r)
+	case "touchid", "fingerprint":
+		touchID(r, args[1:])
 	case "update":
 		update()
 	case "repair":
 		repair()
 	case "wallpaper":
-		if len(args) > 1 && args[1] == "generate" {
-			root := findSourceRoot()
-			if root == "" {
-				fmt.Println("wallpaper generation requires a Hyprglass source checkout")
-				os.Exit(1)
-			}
-			script := filepath.Join(root, "scripts", "generate-wallpaper.py")
-			out, err := r.Run("python3", script)
-			if err != nil {
-				fmt.Println("wallpaper generation failed:", err)
-				fmt.Print(out)
-				os.Exit(1)
-			}
-			fmt.Print(out)
-			return
-		}
-		help()
+		wallpaper(r, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", args[0])
 		help()
@@ -102,21 +91,194 @@ Usage:
   hyprglass --help
   hyprglass version
   hyprglass doctor [--json]
-  hyprglass wifi | bluetooth | lte | audio | display | power
+  hyprglass wifi | bluetooth | lte | audio | display | settings | power
+  hyprglass touchid [status|enroll|verify]
   hyprglass update
   hyprglass repair
-  hyprglass wallpaper generate
+  hyprglass wallpaper [apply|generate]
 `)
 }
-func power() {
-	fmt.Println(strings.TrimSpace(`Power actions:
-  loginctl lock-session
-  systemctl suspend
-  systemctl poweroff
+func power(r command.Runner) {
+	type action struct {
+		Key         string
+		Label       string
+		Command     string
+		Args        []string
+		Destructive bool
+	}
+	actions := []action{
+		{Key: "1", Label: "Lock session", Command: "loginctl", Args: []string{"lock-session"}},
+		{Key: "2", Label: "Suspend", Command: "systemctl", Args: []string{"suspend"}},
+		{Key: "3", Label: "Log out of Hyprland", Command: "hyprctl", Args: []string{"dispatch", "exit"}, Destructive: true},
+		{Key: "4", Label: "Reboot", Command: "systemctl", Args: []string{"reboot"}, Destructive: true},
+		{Key: "5", Label: "Power off", Command: "systemctl", Args: []string{"poweroff"}, Destructive: true},
+		{Key: "q", Label: "Cancel"},
+	}
 
-Hyprglass V0 keeps destructive power commands manual.`))
-	fmt.Print("\nPress Enter to close.")
-	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	reader := bufio.NewReader(os.Stdin)
+	tui.Header("Power")
+	for _, a := range actions {
+		fmt.Printf("  %s  %s\n", a.Key, a.Label)
+	}
+	fmt.Print("\nSelect: ")
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(strings.ToLower(choice))
+	for _, a := range actions {
+		if choice != a.Key {
+			continue
+		}
+		if a.Command == "" {
+			fmt.Println("Canceled.")
+			return
+		}
+		if !r.Exists(a.Command) {
+			fmt.Println(a.Command, "is not installed or not on PATH")
+			return
+		}
+		if a.Destructive {
+			fmt.Printf("Type yes to confirm %q: ", a.Label)
+			confirm, _ := reader.ReadString('\n')
+			if strings.TrimSpace(strings.ToLower(confirm)) != "yes" {
+				fmt.Println("Canceled.")
+				return
+			}
+		}
+		out, err := r.Run(a.Command, a.Args...)
+		if err != nil {
+			fmt.Println("Action failed:", err)
+			fmt.Print(out)
+			return
+		}
+		fmt.Print(out)
+		return
+	}
+	fmt.Println("Unknown selection.")
+}
+
+func settings(r command.Runner) {
+	tui.Header("Settings")
+	home, _ := os.UserHomeDir()
+	paths := []string{
+		".config/hypr/hyprland.conf",
+		".config/hypr/hyprpaper.conf",
+		".config/waybar/config.jsonc",
+		".config/waybar/style.css",
+		".config/kitty/kitty.conf",
+		".config/gtk-3.0/settings.ini",
+		".config/gtk-4.0/settings.ini",
+	}
+	for _, p := range paths {
+		status := "missing"
+		if _, err := os.Stat(filepath.Join(home, p)); err == nil {
+			status = "ok"
+		}
+		fmt.Printf("%-38s %s\n", "~/"+p, status)
+	}
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  hyprglass wallpaper apply      apply and reload Hyprglass wallpaper")
+	fmt.Println("  hyprglass power                open power actions")
+	fmt.Println("  hyprglass touchid status       check fingerprint tools")
+	fmt.Println("  hyprglass doctor               run health checks")
+	if r.Exists("gsettings") {
+		out, _ := r.Run("gsettings", "get", "org.gnome.desktop.interface", "color-scheme")
+		if value := cleanGSettingsValue(out); value != "" {
+			fmt.Println("GTK color-scheme:", value)
+		}
+	}
+}
+
+func touchID(r command.Runner, args []string) {
+	mode := "status"
+	if len(args) > 0 {
+		mode = args[0]
+	}
+	tui.Header("Touch ID / Fingerprint")
+	if !r.Exists("fprintd-enroll") || !r.Exists("fprintd-verify") {
+		fmt.Println("Fingerprint tools are missing. Install fprintd.")
+		fmt.Println("PAM is not edited automatically; review distro docs before enabling fingerprint auth for sudo/login.")
+		return
+	}
+	switch mode {
+	case "status":
+		if r.Exists("fprintd-list") {
+			user := os.Getenv("USER")
+			var out string
+			var err error
+			if user == "" {
+				out, err = r.Run("fprintd-list")
+			} else {
+				out, err = r.Run("fprintd-list", user)
+			}
+			if err != nil {
+				fmt.Println("Could not list enrolled fingerprints. Make sure fprintd can access the system bus and a fingerprint reader is present.")
+			} else if strings.TrimSpace(out) != "" {
+				fmt.Print(strings.TrimSpace(out))
+				fmt.Println()
+			}
+		}
+		if r.Exists("systemctl") {
+			out, err := r.Run("systemctl", "status", "fprintd.service", "--no-pager")
+			if err != nil && strings.Contains(out, "Failed to connect") {
+				fmt.Println("fprintd service status unavailable from this session.")
+			} else {
+				for _, line := range firstLines(out, 8) {
+					fmt.Println(line)
+				}
+			}
+		}
+		fmt.Println("Commands: hyprglass touchid enroll | hyprglass touchid verify")
+	case "enroll":
+		out, err := r.Run("fprintd-enroll")
+		fmt.Print(out)
+		if err != nil {
+			fmt.Println("Enrollment failed:", err)
+			os.Exit(1)
+		}
+	case "verify":
+		out, err := r.Run("fprintd-verify")
+		fmt.Print(out)
+		if err != nil {
+			fmt.Println("Verification failed:", err)
+			os.Exit(1)
+		}
+	default:
+		fmt.Println("Usage: hyprglass touchid [status|enroll|verify]")
+	}
+}
+
+func wallpaper(r command.Runner, args []string) {
+	mode := "apply"
+	if len(args) > 0 {
+		mode = args[0]
+	}
+	root := findSourceRoot()
+	if root == "" {
+		fmt.Println("wallpaper commands require a Hyprglass source checkout")
+		os.Exit(1)
+	}
+	source := filepath.Join(root, "assets", "wallpapers", "hyprglass-dusk.png")
+	switch mode {
+	case "generate":
+		script := filepath.Join(root, "scripts", "generate-wallpaper.py")
+		out, err := r.Run("python3", script)
+		if err != nil {
+			fmt.Println("wallpaper generation failed:", err)
+			fmt.Print(out)
+			os.Exit(1)
+		}
+		fmt.Print(out)
+	case "apply":
+	default:
+		fmt.Println("Usage: hyprglass wallpaper [apply|generate]")
+		os.Exit(2)
+	}
+	if err := installWallpaper(root, source); err != nil {
+		fmt.Println("could not install wallpaper:", err)
+		os.Exit(1)
+	}
+	restartHyprpaper(r)
+	fmt.Println("Wallpaper installed to ~/.config/hypr/assets/wallpapers/hyprglass-dusk.png")
 }
 func update() {
 	root := findSourceRoot()
@@ -210,4 +372,89 @@ func ensureExecutableBits(root string) {
 			_ = os.Chmod(m, 0o755)
 		}
 	}
+}
+
+func installWallpaper(root, source string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	targetDir := filepath.Join(home, ".config", "hypr", "assets", "wallpapers")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return err
+	}
+	if err := copyFile(source, filepath.Join(targetDir, "hyprglass-dusk.png")); err != nil {
+		return err
+	}
+	hyprpaper := filepath.Join(root, "config", "hypr", "hyprpaper.conf")
+	if _, err := os.Stat(hyprpaper); err == nil {
+		if err := copyFile(hyprpaper, filepath.Join(home, ".config", "hypr", "hyprpaper.conf")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func restartHyprpaper(r command.Runner) {
+	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
+		return
+	}
+	if r.Exists("pkill") {
+		_, _ = r.Run("pkill", "-x", "hyprpaper")
+	}
+	if r.Exists("hyprpaper") {
+		cmd := exec.Command("hyprpaper")
+		if err := cmd.Start(); err != nil {
+			fmt.Println("Could not restart hyprpaper:", err)
+		} else {
+			_ = cmd.Process.Release()
+		}
+	}
+}
+
+func firstLines(s string, limit int) []string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+		if len(lines) >= limit {
+			break
+		}
+	}
+	return lines
+}
+
+func cleanGSettingsValue(out string) string {
+	lines := strings.Split(out, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "(") {
+			continue
+		}
+		return line
+	}
+	return ""
 }

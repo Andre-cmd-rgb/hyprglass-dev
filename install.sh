@@ -188,6 +188,17 @@ write_source_root() {
   printf '%s\n' "$ROOT" >"$dst"
 }
 
+configure_desktop_theme() {
+  if [[ $DRY -eq 1 ]]; then
+    echo "+ set GTK/libadwaita dark preference when gsettings is available"
+    return 0
+  fi
+  if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface gtk-theme Adwaita-dark 2>/dev/null || true
+  fi
+}
+
 ensure_current_shell_command() {
   local target="$PREFIX/hyprglass"
   local link="/usr/local/bin/hyprglass"
@@ -356,6 +367,7 @@ copy_cfg "$ROOT/config/hypridle/hypridle.conf" "$HOME/.config/hypr/hypridle.conf
 copy_cfg "$ROOT/config/mako"     "$HOME/.config/mako"
 copy_cfg "$ROOT/config/fuzzel"   "$HOME/.config/fuzzel"
 copy_cfg "$ROOT/config/gtk"      "$HOME/.config/gtk-3.0"
+copy_cfg "$ROOT/config/gtk-4.0"  "$HOME/.config/gtk-4.0"
 copy_cfg "$ROOT/config/qt"       "$HOME/.config/qt6ct"
 
 run mkdir -p "$HOME/.config/hypr/assets" "$HOME/.config/hyprglass/docs"
@@ -363,6 +375,7 @@ run cp -a "$ROOT/assets/wallpapers" "$HOME/.config/hypr/assets/"
 run cp -a "$ROOT/docs/shortcuts.md" "$HOME/.config/hyprglass/docs/shortcuts.md"
 write_source_root
 configure_path
+configure_desktop_theme
 ensure_current_shell_command
 verify_installed_configs
 

@@ -28,6 +28,7 @@ run go test ./... || fail "go test"
 run go vet ./... || fail "go vet"
 run go build -buildvcs=false -ldflags "-s -w -X main.version=$version -X main.sourceRoot=$ROOT" -o "$tmpdir/hyprglass" ./cmd/hyprglass || fail "go build"
 run "$tmpdir/hyprglass" --help >/dev/null || fail "hyprglass help"
+printf 'q\n' | "$tmpdir/hyprglass" power >/dev/null || fail "hyprglass power menu"
 json=$("$tmpdir/hyprglass" doctor --json) || fail "doctor json command"
 if command -v jq >/dev/null 2>&1; then echo "$json" | jq . >/dev/null || fail "invalid doctor JSON"; else warn "jq missing; JSON validation by jq skipped"; fi
 if command -v jq >/dev/null 2>&1; then jq -e . config/waybar/config.jsonc >/dev/null || fail "invalid Waybar JSONC"; else python3 -m json.tool config/waybar/config.jsonc >/dev/null || fail "invalid Waybar JSONC"; fi
@@ -47,6 +48,9 @@ grep -Fq "Hyprglass main Hyprland config" "$install_home/.config/hypr/hyprland.c
 [[ -f "$install_home/.config/hypr/hyprpaper.conf" ]] || fail "installer did not copy hyprpaper.conf"
 [[ -f "$install_home/.config/hypr/assets/wallpapers/hyprglass-dusk.png" ]] || fail "installer did not copy wallpaper asset"
 [[ -f "$install_home/.config/waybar/config.jsonc" && -f "$install_home/.config/waybar/style.css" ]] || fail "installer did not copy waybar config/style"
+[[ -f "$install_home/.config/gtk-4.0/settings.ini" ]] || fail "installer did not copy GTK4 settings"
+HOME="$install_home" "$tmpdir/hyprglass" wallpaper apply >/dev/null || fail "wallpaper apply command"
+[[ -f "$install_home/.config/hypr/assets/wallpapers/hyprglass-dusk.png" ]] || fail "wallpaper apply did not install wallpaper"
 pass "temp install replaces generated config and copies wallpaper/top bar files"
 find . -xtype l -print -quit | grep -q . && fail "broken symlink found" || pass "no broken symlinks"
 for s in scripts/*.sh scripts/*.py; do [[ -x $s ]] || fail "$s not executable"; done
